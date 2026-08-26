@@ -472,8 +472,8 @@ const BET_RULES = {
   MAX_SINGLE: 3000,        // 1 pick
   MAX_STEP: 500,           // 2+ picks
   MAX_PAYOUT: 10000,       // per slip
-  SINGLE_CUTOFF_MIN: 10,   // singles close 10 min before kickoff
-  STEP_CUTOFF_MIN: 180,    // steps close 3 h before the earliest leg
+  SINGLE_CUTOFF_MIN: 180,  // เต็ง closes 3 h before kickoff
+  STEP_CUTOFF_MIN: 10,     // steps close 10 min before their earliest leg
   MAX_PICKS_PER_MATCH: 2,
 };
 

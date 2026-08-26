@@ -221,7 +221,7 @@ async function renderBetting() {
     html += `<div style="color:var(--text-muted);text-align:center;padding:20px">${lang === 'th' ? 'ยังไม่มีคู่ที่เปิดรับแทง' : 'No open matches with lines'}</div>`;
   } else {
     const chipStyle = 'font-size:0.82rem;font-weight:700;background:var(--secondary);color:#fff;border:none;padding:5px 12px;border-radius:var(--radius);cursor:pointer';
-    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br><b>กติกา</b><br>1 pick = เต็ง (สูงสุด 3,000)<br>2 picks ขึ้นไป = สเต็ป (สูงสุด 500)<br>ได้สูงสุด 10,000 ต่อสลิป<br>สเต็ปต้องแทงก่อนเตะ 3 ชม.<br>เต็งแทงได้ถึงก่อนเตะ 10 นาที<br>สูงสุด 2 picks ต่อคู่ · ขั้นต่ำ 10' : 'Tap to select, tap again to deselect<br><b>Rules</b><br>1 pick = single (max 3,000)<br>2+ picks = step (max 500)<br>Max payout 10,000 per slip<br>Steps close 3h before kickoff<br>Singles close 10 min before<br>Max 2 picks per match · min 10'}</p></div>`;
+    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br><b>กติกา</b><br>1 pick = เต็ง (สูงสุด 3,000) — <b>ต้องแทงก่อนเตะ 3 ชม.</b><br>สเต็ป = 3 คู่ขึ้นไป (สูงสุด 500) หรือ AH+สูงต่ำ คู่เดียวกัน<br>สเต็ปแทงได้ถึงก่อนเตะ 10 นาที<br>ได้สูงสุด 10,000 ต่อสลิป<br>สูงสุด 2 picks ต่อคู่ · ขั้นต่ำ 10' : 'Tap to select, tap again to deselect<br><b>Rules</b><br>1 pick = single (max 3,000) — <b>closes 3h before kickoff</b><br>Step = 3+ matches (max 500), or AH+O/U on one match<br>Steps close 10 min before kickoff<br>Max payout 10,000 per slip<br>Max 2 picks per match · min 10'}</p></div>`;
     todayAll.forEach(m => {
       if (isMatchLocked(m)) { html += renderBettingCardLocked(m); }
       else { html += renderBettingCard(m); }
@@ -587,18 +587,16 @@ async function renderBetting() {
         : `Max payout ${fmtM(BET_RULES.MAX_PAYOUT)} per slip — lower the stake or drop a leg`, 5000);
       return;
     }
-    if (isStepSlip) {
-      const cutoffMs = BET_RULES.STEP_CUTOFF_MIN * 60 * 1000;
-      const tooLate = pickEntries.some(([, d]) => {
-        const m = (state.matchById && state.matchById[d.matchId]);
-        return m && Date.now() >= kickoffUtc(m.date).getTime() - cutoffMs;
-      });
-      if (tooLate) {
-        showToast(lang === 'th'
-          ? 'สเต็ปต้องแทงก่อนเตะ 3 ชม.'
-          : 'Steps close 3h before kickoff', 5000);
-        return;
-      }
+    const cutoffMs = (isStepSlip ? BET_RULES.STEP_CUTOFF_MIN : BET_RULES.SINGLE_CUTOFF_MIN) * 60 * 1000;
+    const tooLate = pickEntries.some(([, d]) => {
+      const m = (state.matchById && state.matchById[d.matchId]);
+      return m && Date.now() >= kickoffUtc(m.date).getTime() - cutoffMs;
+    });
+    if (tooLate) {
+      showToast(lang === 'th'
+        ? (isStepSlip ? 'คู่นี้ปิดรับแทงแล้ว' : 'เต็งต้องแทงก่อนเตะ 3 ชม.')
+        : (isStepSlip ? 'Match is closed' : 'Singles close 3h before kickoff'), 5000);
+      return;
     }
 
     const dup = checkDuplicatePicks(betPicks);
@@ -641,8 +639,8 @@ async function renderBetting() {
       hideLoading();
       if (result && !result.success) {
         if (result.code === 'odds_changed') { await handleOddsRejection(); return; }
-        if (result.code === 'step_too_late') {
-          showToast(lang === 'th' ? 'สเต็ปต้องแทงก่อนเตะ 3 ชม.' : 'Steps close 3h before kickoff', 5000);
+        if (result.code === 'single_too_late') {
+          showToast(lang === 'th' ? 'เต็งต้องแทงก่อนเตะ 3 ชม.' : 'Singles close 3h before kickoff', 5000);
           return;
         }
         if (result.code === 'max_payout') {
