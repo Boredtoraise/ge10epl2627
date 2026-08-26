@@ -1265,7 +1265,11 @@ function renderBettingLoginForm(container) {
     if (result.success) {
       await refreshData();
       buildLinesFromMatches();
+      // is_admin only becomes known here — without this the admin-only tabs
+      // (ราคา, Insight) stay hidden until the page is reloaded
+      updateAdminUI();
       await renderBetting();
+      updateTabBadges();
       hideLoading();
     } else {
       hideLoading();
