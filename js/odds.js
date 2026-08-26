@@ -64,10 +64,15 @@ function renderOdds() {
 
     if (!locked) {
       html += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.78rem">`;
+      const ahNum = parseFloat(ahLine);
+      const favTxt = !ahLine || ahNum === 0 ? (lang === 'th' ? 'ราคาเท่ากัน' : 'level')
+        : ahNum < 0 ? `${t1} ${lang === 'th' ? 'ต่อ' : 'gives'} ${Math.abs(ahNum)}`
+        : `${t2} ${lang === 'th' ? 'ต่อ' : 'gives'} ${ahNum}`;
       html += `<span style="min-width:26px;color:var(--text-muted)">AH</span>`;
       html += oddsSelect('', m.id, 'ah_line', ahLine, ahLineChoices(), lang === 'th' ? 'ไม่มี' : 'none');
-      html += oddsSelect('', m.id, 'ah_odds_h', state.ahOddsH[m.id] || '', ODDS_CHOICES, lang === 'th' ? 'เจ้า' : 'H');
-      html += oddsSelect('', m.id, 'ah_odds_a', state.ahOddsA[m.id] || '', ODDS_CHOICES, lang === 'th' ? 'รอง' : 'A');
+      html += oddsSelect('', m.id, 'ah_odds_h', state.ahOddsH[m.id] || '', ODDS_CHOICES, t1 + '?');
+      html += oddsSelect('', m.id, 'ah_odds_a', state.ahOddsA[m.id] || '', ODDS_CHOICES, t2 + '?');
+      html += `<span style="font-size:0.72rem;color:var(--text-muted)">${favTxt}</span>`;
       html += `</div>`;
       html += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.78rem;margin-top:5px">`;
       html += `<span style="min-width:26px;color:var(--text-muted)">${lang === 'th' ? 'สูงต่ำ' : 'O/U'}</span>`;
