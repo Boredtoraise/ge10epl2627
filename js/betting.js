@@ -221,7 +221,7 @@ async function renderBetting() {
     html += `<div style="color:var(--text-muted);text-align:center;padding:20px">${lang === 'th' ? 'ยังไม่มีคู่ที่เปิดรับแทง' : 'No open matches with lines'}</div>`;
   } else {
     const chipStyle = 'font-size:0.82rem;font-weight:700;background:var(--secondary);color:#fff;border:none;padding:5px 12px;border-radius:var(--radius);cursor:pointer';
-    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br><b>กติกา</b><br><b>เต็ง</b> (1 pick, สูงสุด 3,000) — เปิดแทง <b>3 ชม. ก่อนคู่แรกของนัดนั้น หรือ 18:00 น. ถ้าคู่แรกดึก</b><br><b>สเต็ป</b> = 3 คู่ขึ้นไป (สูงสุด 500) หรือ AH+สูงต่ำ คู่เดียวกัน — แทงล่วงหน้าได้<br>ปิดรับทุกประเภทก่อนเตะ 10 นาที<br>ได้สูงสุด 10,000 ต่อสลิป<br>สูงสุด 2 picks ต่อคู่ · ขั้นต่ำ 10' : 'Tap to select, tap again to deselect<br><b>Rules</b><br><b>Single</b> (1 pick, max 3,000) — opens <b>3h before the first match, or 18:00 Thai if that match is late at night</b><br><b>Step</b> = 3+ matches (max 500), or AH+O/U on one match — any time<br>Everything closes 10 min before kickoff<br>Max payout 10,000 per slip<br>Max 2 picks per match · min 10'}</p></div>`;
+    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br><b>กติกา</b><br><b>เต็ง</b> (1 pick, สูงสุด 3,000) — เปิดแทง <b>3 ชม. ก่อนคู่แรกของนัดนั้น หรือ 18:00 น. ถ้าคู่แรกดึก</b><br><b>สเต็ป</b> = <b>3 picks ขึ้นไป</b> (สูงสุด 500) — แทงล่วงหน้าได้ (2 picks แทงไม่ได้)<br>ปิดรับทุกประเภทก่อนเตะ 10 นาที<br>ได้สูงสุด 10,000 ต่อสลิป<br>สูงสุด 2 picks ต่อคู่ · ขั้นต่ำ 10' : 'Tap to select, tap again to deselect<br><b>Rules</b><br><b>Single</b> (1 pick, max 3,000) — opens <b>3h before the first match, or 18:00 Thai if that match is late at night</b><br><b>Step</b> = <b>3+ picks</b> (max 500) — any time (2 picks is not a valid slip)<br>Everything closes 10 min before kickoff<br>Max payout 10,000 per slip<br>Max 2 picks per match · min 10'}</p></div>`;
     todayAll.forEach(m => {
       if (isMatchLocked(m)) { html += renderBettingCardLocked(m); }
       else { html += renderBettingCard(m); }
@@ -560,7 +560,13 @@ async function renderBetting() {
     // Singles used to be allowed only on matches kicking off today, which in a
     // gameweek view meant the button silently did nothing. Any open match now.
     else if (pickCount === 1) valid = true;
-    else if (pickCount === 2 && matchCount === 1) valid = true;
+    // AH + O/U on one match used to be allowed here. It was never a real bet
+    // type — every such slip in the WC pool was cancelled by hand — and a step
+    // is 3 picks minimum, so it is refused with a reason instead.
+    else if (pickCount === 2) {
+      showToast(lang === 'th' ? 'สเต็ปขั้นต่ำ 3 picks' : 'A step needs at least 3 picks', 4000);
+      return;
+    }
     else if (matchCount >= 3) valid = true;
     else if (matchCount === 2 && pickCount >= 4) valid = true;
 
@@ -568,7 +574,7 @@ async function renderBetting() {
 
     // House rules, mirrored from BET_RULES. The server enforces the same limits
     // in validatePicks/submitSlip — this is only so the message is instant.
-    const isStepSlip = pickCount >= 2;
+    const isStepSlip = pickCount >= BET_RULES.MIN_STEP_PICKS;
     if (betAmount < BET_RULES.MIN_BET) {
       showToast(lang === 'th' ? `ขั้นต่ำ ${BET_RULES.MIN_BET}` : `Min ${BET_RULES.MIN_BET}`);
       return;
@@ -651,6 +657,10 @@ async function renderBetting() {
       hideLoading();
       if (result && !result.success) {
         if (result.code === 'odds_changed') { await handleOddsRejection(); return; }
+        if (result.code === 'need_3_picks') {
+          showToast(lang === 'th' ? 'สเต็ปขั้นต่ำ 3 picks' : 'A step needs at least 3 picks', 4000);
+          return;
+        }
         if (result.code === 'single_too_early') {
           showToast(lang === 'th' ? 'เต็งยังไม่เปิดสำหรับนัดนี้' : 'Singles are not open yet for this gameweek', 5000);
           return;

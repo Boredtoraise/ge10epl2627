@@ -477,6 +477,7 @@ const BET_RULES = {
   SINGLE_CUTOFF_MIN: 10,   // เต็ง closes 10 min before kickoff
   STEP_CUTOFF_MIN: 10,     // steps: open any time until 10 min before
   MAX_PICKS_PER_MATCH: 2,
+  MIN_STEP_PICKS: 3,       // 1 pick = เต็ง, 3+ = สเต็ป, 2 = ไม่ได้
 };
 
 const MATCH_BY_ID = {};
