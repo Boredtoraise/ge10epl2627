@@ -51,7 +51,7 @@ function renderInsight() {
 
     mine.forEach(s => {
       const r      = resolveSlip(s);
-      const isStep = (s.picks || []).length >= 3;
+      const isStep = (s.picks || []).length >= 2;
       totalBet += s.bet || 0;
       netPnl   += r.profit;
 

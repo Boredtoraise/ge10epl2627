@@ -515,7 +515,7 @@ function renderFunLeaderboard() {
       const r = resolveSlip(s);
       totalBet    += s.bet || 0;
       totalProfit += r.profit;
-      if ((s.picks || []).length >= 3) hasStep = true; else hasSingle = true;
+      if ((s.picks || []).length >= 2) hasStep = true; else hasSingle = true;
       if (r.status === 'won') wins++;
       else if (r.status === 'lost') losses++;
 
@@ -1292,7 +1292,10 @@ function resolveSlip(slip) {
   const picks = slip.picks || [];
   if (!picks.length) return { status: 'pending', profit: 0 };
 
-  const isStep = picks.length >= 3;
+  // 2+ picks is a step, including AH + O/U on the same match. It used to be
+  // `>= 3`, which quietly settled a 2-pick slip as a single — only pick[0]
+  // counted, while the player was charged the combined odds of both.
+  const isStep = picks.length >= 2;
 
   // Resolve each pick that has a score
   const outcomes = picks.map(p => {

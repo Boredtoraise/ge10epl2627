@@ -465,6 +465,18 @@ const GW_PERIOD = {
   37: '2027-05',   38: '2027-05', 
 };
 
+// House rules — UI copy. The authoritative copy is RULES in Code.gs; this one
+// only drives the messages and the disabled states. Keep the two in sync.
+const BET_RULES = {
+  MIN_BET: 10,
+  MAX_SINGLE: 3000,        // 1 pick
+  MAX_STEP: 500,           // 2+ picks
+  MAX_PAYOUT: 10000,       // per slip
+  SINGLE_CUTOFF_MIN: 10,   // singles close 10 min before kickoff
+  STEP_CUTOFF_MIN: 180,    // steps close 3 h before the earliest leg
+  MAX_PICKS_PER_MATCH: 2,
+};
+
 const MATCH_BY_ID = {};
 MATCHES.forEach(m => { MATCH_BY_ID[m.id] = m; });
 

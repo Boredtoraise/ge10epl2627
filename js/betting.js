@@ -221,7 +221,7 @@ async function renderBetting() {
     html += `<div style="color:var(--text-muted);text-align:center;padding:20px">${lang === 'th' ? 'ยังไม่มีคู่ที่เปิดรับแทง' : 'No open matches with lines'}</div>`;
   } else {
     const chipStyle = 'font-size:0.82rem;font-weight:700;background:var(--secondary);color:#fff;border:none;padding:5px 12px;border-radius:var(--radius);cursor:pointer';
-    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br>1 pick = single<br>2 คู่ = 4 picks (AH+O/U ทั้งคู่)<br>3 คู่+ = step (pick ละคู่ก็ได้)' : 'Tap to select, tap again to deselect<br>1 pick = single<br>2 matches = 4 picks (AH+O/U both)<br>3+ matches = step (1 pick/match ok)'}</p></div>`;
+    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br><b>กติกา</b><br>1 pick = เต็ง (สูงสุด 3,000)<br>2 picks ขึ้นไป = สเต็ป (สูงสุด 500)<br>ได้สูงสุด 10,000 ต่อสลิป<br>สเต็ปต้องแทงก่อนเตะ 3 ชม.<br>เต็งแทงได้ถึงก่อนเตะ 10 นาที<br>สูงสุด 2 picks ต่อคู่ · ขั้นต่ำ 10' : 'Tap to select, tap again to deselect<br><b>Rules</b><br>1 pick = single (max 3,000)<br>2+ picks = step (max 500)<br>Max payout 10,000 per slip<br>Steps close 3h before kickoff<br>Singles close 10 min before<br>Max 2 picks per match · min 10'}</p></div>`;
     todayAll.forEach(m => {
       if (isMatchLocked(m)) { html += renderBettingCardLocked(m); }
       else { html += renderBettingCard(m); }
@@ -557,17 +557,49 @@ async function renderBetting() {
     const _tooMany = Object.values(_ppm).some(n => n > 2);
     let valid = false;
     if (_tooMany) valid = false;
-    else if (pickCount === 1) {
-      const sd = pickEntries[0][1];
-      const sm = (state.matchById && state.matchById[sd.matchId]) || MATCHES.find(x => x.id === sd.matchId);
-      if (!sm || isMatchToday(sm)) valid = true;
-    }
+    // Singles used to be allowed only on matches kicking off today, which in a
+    // gameweek view meant the button silently did nothing. Any open match now.
+    else if (pickCount === 1) valid = true;
     else if (pickCount === 2 && matchCount === 1) valid = true;
     else if (matchCount >= 3) valid = true;
     else if (matchCount === 2 && pickCount >= 4) valid = true;
 
     if (!valid) return;
-    if (betAmount < 10) { showToast(lang === 'th' ? 'ขั้นต่ำ 10' : 'Min 10'); return; }
+
+    // House rules, mirrored from BET_RULES. The server enforces the same limits
+    // in validatePicks/submitSlip — this is only so the message is instant.
+    const isStepSlip = pickCount >= 2;
+    if (betAmount < BET_RULES.MIN_BET) {
+      showToast(lang === 'th' ? `ขั้นต่ำ ${BET_RULES.MIN_BET}` : `Min ${BET_RULES.MIN_BET}`);
+      return;
+    }
+    const maxStake = isStepSlip ? BET_RULES.MAX_STEP : BET_RULES.MAX_SINGLE;
+    if (betAmount > maxStake) {
+      showToast(lang === 'th'
+        ? `${isStepSlip ? 'สเต็ป' : 'เต็ง'} สูงสุด ${fmtM(maxStake)}`
+        : `${isStepSlip ? 'Step' : 'Single'} max ${fmtM(maxStake)}`, 4000);
+      return;
+    }
+    const previewPayout = Math.round(betAmount * pickEntries.reduce((a, [, d]) => a * d.odds, 1));
+    if (previewPayout > BET_RULES.MAX_PAYOUT) {
+      showToast(lang === 'th'
+        ? `ได้สูงสุด ${fmtM(BET_RULES.MAX_PAYOUT)} ต่อสลิป — ลดเงินหรือลดคู่`
+        : `Max payout ${fmtM(BET_RULES.MAX_PAYOUT)} per slip — lower the stake or drop a leg`, 5000);
+      return;
+    }
+    if (isStepSlip) {
+      const cutoffMs = BET_RULES.STEP_CUTOFF_MIN * 60 * 1000;
+      const tooLate = pickEntries.some(([, d]) => {
+        const m = (state.matchById && state.matchById[d.matchId]);
+        return m && Date.now() >= kickoffUtc(m.date).getTime() - cutoffMs;
+      });
+      if (tooLate) {
+        showToast(lang === 'th'
+          ? 'สเต็ปต้องแทงก่อนเตะ 3 ชม.'
+          : 'Steps close 3h before kickoff', 5000);
+        return;
+      }
+    }
 
     const dup = checkDuplicatePicks(betPicks);
     if (dup) {
@@ -609,6 +641,20 @@ async function renderBetting() {
       hideLoading();
       if (result && !result.success) {
         if (result.code === 'odds_changed') { await handleOddsRejection(); return; }
+        if (result.code === 'step_too_late') {
+          showToast(lang === 'th' ? 'สเต็ปต้องแทงก่อนเตะ 3 ชม.' : 'Steps close 3h before kickoff', 5000);
+          return;
+        }
+        if (result.code === 'max_payout') {
+          showToast(lang === 'th'
+            ? `ได้สูงสุด ${fmtM(BET_RULES.MAX_PAYOUT)} ต่อสลิป`
+            : `Max payout ${fmtM(BET_RULES.MAX_PAYOUT)} per slip`, 5000);
+          return;
+        }
+        if (result.code === 'max_stake') {
+          showToast(lang === 'th' ? `เกินลิมิต (สูงสุด ${fmtM(result.max)})` : `Over limit (max ${fmtM(result.max)})`, 5000);
+          return;
+        }
         if (result.code === 'match_locked') {
           showToast(lang === 'th' ? 'คู่นี้ปิดรับแทงแล้ว' : 'Match is closed', 5000);
           await refreshMatches();
@@ -1087,7 +1133,7 @@ function renderSlipCard(slip, opts) {
   const resolved     = typeof resolveSlip === 'function' ? resolveSlip(slip) : { status: slip.status, profit: 0 };
   const st           = resolved.status;
   const picks        = slip.picks || [];
-  const isStep       = picks.length >= 3;
+  const isStep       = picks.length >= 2;
   const isApproved   = slip.status === 'approved';
   const needsApprove = state.isAdmin && (st === 'won' || st === 'lost') && slip.status !== 'approved' && slip.status !== 'cancelled';
 
