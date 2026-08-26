@@ -472,7 +472,8 @@ const BET_RULES = {
   MAX_SINGLE: 3000,        // 1 pick
   MAX_STEP: 500,           // 2+ picks
   MAX_PAYOUT: 10000,       // per slip
-  SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before the gameweek's FIRST kickoff
+  SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before the gameweek's FIRST kickoff...
+  SINGLE_OPEN_HOUR_TH: 18, // ...or 18:00 Thai that day, whichever is earlier
   SINGLE_CUTOFF_MIN: 10,   // เต็ง closes 10 min before kickoff
   STEP_CUTOFF_MIN: 10,     // steps: open any time until 10 min before
   MAX_PICKS_PER_MATCH: 2,
@@ -513,13 +514,17 @@ function periodLabel(period, lang) {
   return `${(lang === 'th' ? th : en)[m - 1]} ${y}`;
 }
 
-// When เต็ง betting opens for a gameweek: 3 h before its earliest kickoff, so
-// the whole round opens at once and a 02:00 match needn't be bet at 23:00.
+// When เต็ง betting opens for a gameweek: 3 h before its earliest kickoff, or
+// 18:00 Thai that day if that is earlier. The whole round opens at once, and a
+// 02:00 kickoff never pushes the opening to 23:00.
 function singleOpensAt(gw) {
   const ms = MATCHES_BY_GW[gw] || [];
   if (!ms.length) return 0;
   const first = Math.min.apply(null, ms.map(m => kickoffUtc(m.date).getTime()));
-  return first - BET_RULES.SINGLE_OPEN_MIN * 60 * 1000;
+  const threeHoursBefore = first - BET_RULES.SINGLE_OPEN_MIN * 60 * 1000;
+  const TH = 7 * 3600000;
+  const thaiDayStart = Math.floor((threeHoursBefore + TH) / 86400000) * 86400000 - TH;
+  return Math.min(threeHoursBefore, thaiDayStart + BET_RULES.SINGLE_OPEN_HOUR_TH * 3600000);
 }
 
 function gwOf(matchId) {
