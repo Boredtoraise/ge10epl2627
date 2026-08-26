@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>EPL 2026/27 — แทงบอลอังกฤษ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,500;0,600;0,700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=20260826">
+</head>
+<body>
+  <div id="bg-glow"></div>
+
+  <header id="header">
+    <div class="header-top">
+      <h1 class="logo">EPL<span class="logo-year">26/27</span></h1>
+      <button id="refresh-btn" class="btn-icon" title="Refresh data" onclick="manualRefresh()">↻</button>
+      <button id="lang-toggle" class="btn-icon" title="TH/EN">TH</button>
+    </div>
+    <nav id="nav">
+      <a href="#schedule" class="nav-tab active" data-i18n="nav.schedule">ตารางแข่ง</a>
+      <a href="#bet" class="nav-tab" data-i18n="nav.bet">แทงบอล<span class="bet-badge hidden"></span></a>
+      <a href="#summary" class="nav-tab" data-i18n="nav.summary">สรุป</a>
+      <a href="#odds" class="nav-tab admin-only hidden">ราคา</a>
+      <a href="#insight" class="nav-tab admin-only hidden">Insight</a>
+    </nav>
+  </header>
+
+  <main id="app">
+    <div id="view-schedule" class="view"></div>
+    <div id="view-bet" class="view hidden"></div>
+    <div id="view-summary" class="view hidden"></div>
+    <div id="view-odds" class="view hidden"></div>
+    <div id="view-insight" class="view hidden"></div>
+  </main>
+
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <button id="scroll-top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="ขึ้นบนสุด" style="display:none">↑</button>
+
+  <nav id="bottom-nav">
+    <a href="#schedule" class="btm-tab active" data-i18n="nav.schedule">ตาราง</a>
+    <a href="#bet" class="btm-tab" data-i18n="nav.bet">แทงบอล<span class="bet-badge hidden"></span></a>
+    <a href="#summary" class="btm-tab" data-i18n="nav.summary">สรุป</a>
+  </nav>
+
+  <script src="js/data.js?v=20260826"></script>
+  <script src="js/i18n.js?v=20260826"></script>
+  <script src="js/api.js?v=20260826"></script>
+  <script src="js/app.js?v=20260826"></script>
+  <script src="js/schedule.js?v=20260826"></script>
+  <script src="js/betting.js?v=20260826"></script>
+  <script src="js/summary.js?v=20260826"></script>
+  <script src="js/odds.js?v=20260826"></script>
+  <script src="js/insight.js?v=20260826"></script>
+</body>
+</html>
