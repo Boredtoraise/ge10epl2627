@@ -221,7 +221,7 @@ async function renderBetting() {
     html += `<div style="color:var(--text-muted);text-align:center;padding:20px">${lang === 'th' ? 'ยังไม่มีคู่ที่เปิดรับแทง' : 'No open matches with lines'}</div>`;
   } else {
     const chipStyle = 'font-size:0.82rem;font-weight:700;background:var(--secondary);color:#fff;border:none;padding:5px 12px;border-radius:var(--radius);cursor:pointer';
-    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br><b>กติกา</b><br><b>เต็ง</b> (1 pick, สูงสุด 3,000) — เปิดแทง <b>3 ชม. ก่อนคู่แรกของนัดนั้น หรือ 18:00 น. ถ้าคู่แรกดึก</b><br><b>สเต็ป</b> = <b>3 picks ขึ้นไป</b> (สูงสุด 500) — แทงล่วงหน้าได้ (2 picks แทงไม่ได้)<br>ปิดรับทุกประเภทก่อนเตะ 10 นาที<br>ได้สูงสุด 10,000 ต่อสลิป<br>สูงสุด 2 picks ต่อคู่ · ขั้นต่ำ 10' : 'Tap to select, tap again to deselect<br><b>Rules</b><br><b>Single</b> (1 pick, max 3,000) — opens <b>3h before the first match, or 18:00 Thai if that match is late at night</b><br><b>Step</b> = <b>3+ picks</b> (max 500) — any time (2 picks is not a valid slip)<br>Everything closes 10 min before kickoff<br>Max payout 10,000 per slip<br>Max 2 picks per match · min 10'}</p></div>`;
+    if (available.length) html += `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button id="bet-rules-toggle" style="font-size:0.8rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">${lang === 'th' ? 'กติกา ▸' : 'Rules ▸'}</button><button class="bet-random-chip" data-count="4" style="${chipStyle}">🎲 4</button><button class="bet-random-chip" data-count="6" style="${chipStyle}">🎲 6</button><button class="bet-random-chip" data-count="8" style="${chipStyle}">🎲 8</button><button class="bet-random-chip" data-count="all" style="${chipStyle}">🎲 ทั้งหมด</button></div><p id="bet-rules-text" style="display:none;font-size:0.85rem;color:var(--text-muted);margin:6px 0 0">${lang === 'th' ? 'กดเลือก กดอีกที=ยกเลิก<br><b>กติกา</b><br><b>เต็ง</b> (1 pick, สูงสุด 3,000) — เปิดแทง <b>3 ชม. ก่อนคู่แรกของนัดนั้น หรือ 18:00 น. ถ้าคู่แรกดึก</b><br><b>สเต็ป</b> = <b>3 picks ขึ้นไป</b> — ไม่จำกัดเงินแทง แต่ได้ไม่เกิน 10,000 ต่อสลิป (2 picks แทงไม่ได้)<br>ปิดรับทุกประเภทก่อนเตะ 10 นาที<br>ได้สูงสุด 10,000 ต่อสลิป<br>สูงสุด 2 picks ต่อคู่ · ขั้นต่ำ 10' : 'Tap to select, tap again to deselect<br><b>Rules</b><br><b>Single</b> (1 pick, max 3,000) — opens <b>3h before the first match, or 18:00 Thai if that match is late at night</b><br><b>Step</b> = <b>3+ picks</b> — no stake cap, but max payout 10,000 per slip (2 picks is not valid)<br>Everything closes 10 min before kickoff<br>Max payout 10,000 per slip<br>Max 2 picks per match · min 10'}</p></div>`;
     todayAll.forEach(m => {
       if (isMatchLocked(m)) { html += renderBettingCardLocked(m); }
       else { html += renderBettingCard(m); }
@@ -579,11 +579,11 @@ async function renderBetting() {
       showToast(lang === 'th' ? `ขั้นต่ำ ${BET_RULES.MIN_BET}` : `Min ${BET_RULES.MIN_BET}`);
       return;
     }
-    const maxStake = isStepSlip ? BET_RULES.MAX_STEP : BET_RULES.MAX_SINGLE;
-    if (betAmount > maxStake) {
+    // Only เต็ง has a stake cap — the payout cap below bounds steps
+    if (!isStepSlip && betAmount > BET_RULES.MAX_SINGLE) {
       showToast(lang === 'th'
-        ? `${isStepSlip ? 'สเต็ป' : 'เต็ง'} สูงสุด ${fmtM(maxStake)}`
-        : `${isStepSlip ? 'Step' : 'Single'} max ${fmtM(maxStake)}`, 4000);
+        ? `เต็งสูงสุด ${fmtM(BET_RULES.MAX_SINGLE)}`
+        : `Single max ${fmtM(BET_RULES.MAX_SINGLE)}`, 4000);
       return;
     }
     const previewPayout = Math.round(betAmount * pickEntries.reduce((a, [, d]) => a * d.odds, 1));

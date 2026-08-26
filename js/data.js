@@ -469,8 +469,7 @@ const GW_PERIOD = {
 // only drives the messages and the disabled states. Keep the two in sync.
 const BET_RULES = {
   MIN_BET: 10,
-  MAX_SINGLE: 3000,        // 1 pick
-  MAX_STEP: 500,           // 2+ picks
+  MAX_SINGLE: 3000,        // 1 pick. Steps have no stake cap — MAX_PAYOUT bounds them.
   MAX_PAYOUT: 10000,       // per slip
   SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before the gameweek's FIRST kickoff...
   SINGLE_OPEN_HOUR_TH: 18, // ...or 18:00 Thai that day, whichever is earlier
