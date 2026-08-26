@@ -168,6 +168,28 @@ async function updateLines(updates) {
   }
 }
 
+// Open / close เต็ง for one gameweek by hand: 'auto' | 'open' | 'closed'.
+// Server-side it writes `bet_state` on that gameweek's matches rows and clears
+// the same caches update_lines does, so the change is live in seconds.
+async function setBetState(gw, betState) {
+  try {
+    const res = await fetch(API_BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'set_bet_state',
+        player: state.currentPlayer,
+        pin: localStorage.getItem('epl2627_pin'),
+        gw: gw,
+        state: betState,
+      }),
+    });
+    return await res.json();
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 // Monthly settlement. `standings` rows are computed on the client with the same
 // resolveSlip() the UI uses; archive=true also MOVES that month's slips to the
 // slips_archive tab (appended there first, verified, then removed from `slips`).

@@ -31,6 +31,38 @@ function oddsSelect(cls, id, field, value, choices, blankLabel) {
   return html;
 }
 
+// เต็ง open / close for the whole gameweek, so the odds can be set and the
+// round opened in the same place. 'auto' is the default and the safe one: it
+// leaves the time rule in charge, so a forgotten button never locks a gameweek.
+// Neither override touches the per-match cutoff — a match still closes 10 min
+// before its own kickoff — and steps are not affected at all.
+function renderBetStateControl(gw, lang) {
+  const cur = betStateOfGw(gw);
+  const opensAt = singleOpensAt(gw);
+  const t = new Date(opensAt + 7 * 3600 * 1000);
+  const when = `${t.getUTCDate()}/${t.getUTCMonth() + 1} ${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
+  const hint = cur === 'open'
+    ? (lang === 'th' ? 'เปิดรับเต็งอยู่ตอนนี้' : 'Singles open now')
+    : cur === 'closed'
+      ? (lang === 'th' ? 'ไม่รับเต็ง (สเต็ปยังแทงได้)' : 'No singles (steps still open)')
+      : (lang === 'th' ? `เปิดเองตามเวลา ${when} น.` : `Opens by itself ${when}`);
+
+  const opts = [
+    ['auto',   lang === 'th' ? 'อัตโนมัติ' : 'Auto'],
+    ['open',   lang === 'th' ? 'เปิดเต็ง'  : 'Open'],
+    ['closed', lang === 'th' ? 'ปิดเต็ง'   : 'Closed'],
+  ];
+
+  let html = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">`;
+  html += `<span style="font-size:0.78rem;color:var(--text-muted);min-width:32px">${lang === 'th' ? 'เต็ง' : 'Singles'}</span>`;
+  opts.forEach(([v, label]) => {
+    html += `<button class="bet-state-btn" data-state="${v}" style="${cur === v ? SUBTAB_ON : SUBTAB_OFF}">${label}</button>`;
+  });
+  html += `<span style="font-size:0.72rem;color:var(--text-muted)">${hint}</span>`;
+  html += `</div>`;
+  return html;
+}
+
 function renderOdds() {
   const container = document.getElementById('view-odds');
   if (!container) return;
@@ -45,6 +77,7 @@ function renderOdds() {
   const matches = (MATCHES_BY_GW[gw] || []).slice().sort((a, b) => kickoffUtc(a.date) - kickoffUtc(b.date));
 
   let html = renderGwPicker(gw, lang);
+  html += renderBetStateControl(gw, lang);
   html += `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">${lang === 'th'
     ? 'ตั้งราคาแล้วกดบันทึก — เพื่อนเห็นราคาใหม่ทันที (AH อิงเจ้าบ้าน: ลบ=ต่อ บวก=รอง)'
     : 'Set the lines and save — friends see the new price immediately (AH is from the home side)'}</div>`;
@@ -93,6 +126,30 @@ function renderOdds() {
 
   container.innerHTML = html;
   bindGwPicker(container);
+
+  container.querySelectorAll('.bet-state-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      // Sent even when it looks like the current state: if state.matches is
+      // stale (offline load), pressing Auto must still be able to clear a
+      // 'closed' the Sheet is actually holding.
+      const want = btn.dataset.state;
+      showLoading();
+      try {
+        const result = await setBetState(gw, want);
+        if (result && result.success) {
+          await refreshMatches(true);   // fresh=1 so the buttons show what was written
+          renderOdds();
+          const th = { auto: 'กลับไปใช้เวลาอัตโนมัติ', open: 'เปิดรับเต็งแล้ว', closed: 'ปิดรับเต็งแล้ว' };
+          const en = { auto: 'Back to the time rule', open: 'Singles open', closed: 'Singles closed' };
+          showToast((currentLang === 'th' ? th : en)[want]);
+        } else {
+          showToast((result && result.error) || (currentLang === 'th' ? 'บันทึกไม่สำเร็จ' : 'Save failed'), 5000);
+        }
+      } finally {
+        hideLoading();
+      }
+    });
+  });
 
   // Fill every empty price with 1.90 — the common case is only the lines differ
   container.querySelector('#odds-fill')?.addEventListener('click', () => {

@@ -471,6 +471,8 @@ const BET_RULES = {
   MIN_BET: 10,
   MAX_SINGLE: 3000,        // 1 pick. Steps have no stake cap — MAX_PAYOUT bounds them.
   MAX_PAYOUT: 10000,       // per slip
+  // The admin can override the OPENING per gameweek (bet_state, ราคา tab) —
+  // see betStateOfGw() in app.js. The cutoffs below always apply.
   SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before the gameweek's FIRST kickoff...
   SINGLE_OPEN_HOUR_TH: 18, // ...or 18:00 Thai that day, whichever is earlier
   SINGLE_CUTOFF_MIN: 10,   // เต็ง closes 10 min before kickoff
