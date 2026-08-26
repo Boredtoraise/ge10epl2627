@@ -472,7 +472,7 @@ const BET_RULES = {
   MAX_SINGLE: 3000,        // 1 pick
   MAX_STEP: 500,           // 2+ picks
   MAX_PAYOUT: 10000,       // per slip
-  SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before kickoff (a window, not a deadline)
+  SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before the gameweek's FIRST kickoff
   SINGLE_CUTOFF_MIN: 10,   // เต็ง closes 10 min before kickoff
   STEP_CUTOFF_MIN: 10,     // steps: open any time until 10 min before
   MAX_PICKS_PER_MATCH: 2,
@@ -511,6 +511,15 @@ function periodLabel(period, lang) {
   const th = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   const en = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${(lang === 'th' ? th : en)[m - 1]} ${y}`;
+}
+
+// When เต็ง betting opens for a gameweek: 3 h before its earliest kickoff, so
+// the whole round opens at once and a 02:00 match needn't be bet at 23:00.
+function singleOpensAt(gw) {
+  const ms = MATCHES_BY_GW[gw] || [];
+  if (!ms.length) return 0;
+  const first = Math.min.apply(null, ms.map(m => kickoffUtc(m.date).getTime()));
+  return first - BET_RULES.SINGLE_OPEN_MIN * 60 * 1000;
 }
 
 function gwOf(matchId) {
