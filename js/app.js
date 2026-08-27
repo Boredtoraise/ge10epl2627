@@ -241,18 +241,32 @@ async function renderSummaryLazy() {
     }
     container.innerHTML = sk;
     try {
-      const [periodSlips, standings] = await Promise.all([
-        fetchAPI('periodslips'),
-        fetchAPI('standings'),
-      ]);
-
       // This tab resolves a MONTH of slips, but state.matches only holds the 10
       // rows of the viewed gameweek — slips on any other gw would score as
-      // pending. Fetch the matches of whatever period(s) the slips belong to
-      // (normally one; two only while a month straddles settlement).
-      const periods = [...new Set((periodSlips || []).map(s => s.period).filter(Boolean))];
-      if (!periods.length) periods.push(GW_PERIOD[state.gw || currentGw()]);
-      const matchSets = await Promise.all(periods.map(p => fetchAPI('periodmatches&period=' + p)));
+      // pending. It therefore needs the matches of whatever period(s) the slips
+      // belong to, which is only known AFTER the slips are read: three round
+      // trips that could not even be issued together, on a backend that runs
+      // them one at a time. The server does the whole chain in one invocation
+      // now; `period` is the month to fall back on when there are no slips yet.
+      const fallbackPeriod = GW_PERIOD[state.gw || currentGw()] || '';
+      let periodSlips, standings, matchSets;
+      const bundle = state._noSummaryBundle ? null : await fetchAPI('summary&period=' + fallbackPeriod);
+      if (bundle && !bundle.error && bundle.periodslips !== undefined) {
+        periodSlips = bundle.periodslips;
+        standings = bundle.standings;
+        matchSets = [bundle.matches];
+      } else {
+        // Older deployment without the summary action — same reads, the slow way
+        if (bundle && bundle.error) state._noSummaryBundle = true;
+        [periodSlips, standings] = await Promise.all([
+          fetchAPI('periodslips'),
+          fetchAPI('standings'),
+        ]);
+        const periods = [...new Set((periodSlips || []).map(s => s.period).filter(Boolean))];
+        if (!periods.length) periods.push(fallbackPeriod);
+        matchSets = await Promise.all(periods.map(p => fetchAPI('periodmatches&period=' + p)));
+      }
+
       let merged = false;
       matchSets.forEach(ms => {
         if (!ms) return;
@@ -399,18 +413,33 @@ async function refreshData(fresh) {
   try {
     // fresh=1 bypasses the server-side cache (manual ↻ refresh)
     const suffix = (fresh ? '&fresh=1' : '') + '&gw=' + state.gw;
-    // One gameweek = 10 matches and one round of slips, so allslips is small
-    // enough to fetch for everyone — no admin-only / lazy split needed here.
-    const calls = {
-      matches: fetchAPI('matches' + suffix),
-      players: fetchAPI('players'),
-      allSlips: fetchAPI('allslips' + suffix),
-    };
 
-    const results = await Promise.all(Object.values(calls));
-    const keys = Object.keys(calls);
-    const data = {};
-    keys.forEach((k, i) => { data[k] = results[i]; });
+    // ONE call, not three. Apps Script runs a user's executions one at a time,
+    // so the Promise.all below was never parallel — it was three queued script
+    // starts, measured at 6-15 s for a gameweek switch against ~1.5 s for a
+    // single call. One gameweek = 10 matches and one round of slips, so the
+    // bundle is a few KB.
+    let data = null;
+    const boot = state._noBootstrap ? null : await fetchAPI('bootstrap' + suffix);
+    if (boot && !boot.error && boot.matches) {
+      data = { matches: boot.matches, players: boot.players, allSlips: boot.allslips };
+    } else {
+      // Older deployment with no bootstrap action. Pages goes live the moment
+      // it is pushed but Code.gs is redeployed by hand, so the client has to
+      // keep working against both. A refusal is remembered for the session:
+      // every probe is another queued script start, and on this backend a
+      // failed call is retried three times before it gives up.
+      if (boot && boot.error) state._noBootstrap = true;
+      const calls = {
+        matches: fetchAPI('matches' + suffix),
+        players: fetchAPI('players'),
+        allSlips: fetchAPI('allslips' + suffix),
+      };
+      const results = await Promise.all(Object.values(calls));
+      const keys = Object.keys(calls);
+      data = {};
+      keys.forEach((k, i) => { data[k] = results[i]; });
+    }
 
     // Cache it under the gw it was fetched for either way — it is still valid
     // data, just not for the gameweek on screen any more.
