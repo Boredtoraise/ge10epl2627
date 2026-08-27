@@ -5,6 +5,7 @@ const state = {
   currentPlayer: null,
   isAdmin: false,
   currentView: 'schedule',
+  serverBuild: null, // Code.gs BUILD, as reported by the bootstrap response
   gw: null,          // gameweek being viewed — every fetch is scoped to it
   standings: [],     // settled months: one row per player per month
   periodSlips: [],   // every slip of the current unsettled month (summary tab)
@@ -322,6 +323,27 @@ function updateTabBadges() {
 function showLoading() { document.getElementById('loading').classList.remove('hidden'); }
 function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
 
+// --- Build tag in the header ---
+//
+// The client half is read from this file's own <script src="js/app.js?v=X">, so
+// it can never drift from the cache-buster in index.html. The server half
+// arrives with the bootstrap response — a Code.gs redeploy that silently did
+// not land (Save instead of New version) is otherwise invisible.
+function clientBuild() {
+  const s = document.querySelector('script[src*="js/app.js"]');
+  const m = s && /[?&]v=([^&"]+)/.exec(s.getAttribute('src') || '');
+  return m ? m[1] : 'dev';
+}
+
+function renderBuildTag() {
+  const el = document.getElementById('app-build');
+  if (!el) return;
+  el.textContent = 'v' + clientBuild() + (state.serverBuild ? ' · srv ' + state.serverBuild : '');
+  el.title = state.serverBuild
+    ? 'client ' + clientBuild() + ' / Code.gs ' + state.serverBuild
+    : 'client ' + clientBuild() + ' (server has not answered yet)';
+}
+
 // --- Per-gameweek localStorage cache ---
 //
 // One key per gameweek. The old single key held only the gameweek last looked
@@ -369,6 +391,7 @@ function init() {
 
   applyTranslations();
   updateAdminUI();
+  renderBuildTag();
 
   // Load cached matches + players for instant first render
   try {
@@ -423,6 +446,10 @@ async function refreshData(fresh) {
     const boot = state._noBootstrap ? null : await fetchAPI('bootstrap' + suffix);
     if (boot && !boot.error && boot.matches) {
       data = { matches: boot.matches, players: boot.players, allSlips: boot.allslips };
+      if (boot.build && boot.build !== state.serverBuild) {
+        state.serverBuild = boot.build;
+        renderBuildTag();
+      }
     } else {
       // Older deployment with no bootstrap action. Pages goes live the moment
       // it is pushed but Code.gs is redeployed by hand, so the client has to
