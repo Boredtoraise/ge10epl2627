@@ -308,6 +308,29 @@ function updateTabBadges() {
 function showLoading() { document.getElementById('loading').classList.remove('hidden'); }
 function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
 
+// --- Per-gameweek localStorage cache ---
+//
+// One key per gameweek. The old single key held only the gameweek last looked
+// at and was overwritten on every switch, so stepping back to a round you had
+// just seen paid the full ~1.5 s round trip again. Apps Script costs ~1.2 s per
+// call before it even reads the Sheet, so anything we can paint from here is
+// worth keeping.
+const GW_CACHE_TTL = 10 * 60 * 1000;
+
+function gwCacheKey(kind, gw) { return 'epl2627_' + kind + '_gw' + gw; }
+
+function saveGwCache(kind, gw, d) {
+  try { localStorage.setItem(gwCacheKey(kind, gw), JSON.stringify({ t: Date.now(), gw: gw, d: d })); } catch (e) {}
+}
+
+function loadGwCache(kind, gw, maxAge) {
+  try {
+    const c = JSON.parse(localStorage.getItem(gwCacheKey(kind, gw)) || 'null');
+    if (c && c.gw === gw && Date.now() - c.t < (maxAge || GW_CACHE_TTL)) return c.d;
+  } catch (e) {}
+  return null;
+}
+
 // --- Init ---
 function init() {
   console.log('init() called');
@@ -335,18 +358,18 @@ function init() {
 
   // Load cached matches + players for instant first render
   try {
-    const cm = JSON.parse(localStorage.getItem('epl2627_matches') || 'null');
-    if (cm && Date.now() - cm.t < 10 * 60 * 1000 && cm.gw === state.gw) {
-      cm.d.forEach(m => { state.matches[m.match_id] = m; });
+    const cm = loadGwCache('matches', state.gw);
+    if (cm) {
+      cm.forEach(m => { state.matches[m.match_id] = m; });
       buildLinesFromMatches();
     }
     const cp = JSON.parse(localStorage.getItem('epl2627_players') || 'null');
     if (cp && Date.now() - cp.t < 60 * 60 * 1000) {
       state.players = cp.d;
     }
-    const cs = JSON.parse(localStorage.getItem('epl2627_allslips') || 'null');
-    if (cs && Date.now() - cs.t < 10 * 60 * 1000 && cs.gw === state.gw) {
-      state.allSlips = cs.d.map(parsePicks);
+    const cs = loadGwCache('allslips', state.gw);
+    if (cs) {
+      state.allSlips = cs.map(parsePicks);
       if (state.currentPlayer) state.slips = state.allSlips.filter(s => s.player === state.currentPlayer);
     }
   } catch(e) {}
@@ -369,6 +392,10 @@ function init() {
 
 async function refreshData(fresh) {
   if (typeof API_BASE_URL === 'undefined' || !API_BASE_URL) return;
+  // The gameweek this call is for. switchGw no longer waits for the response,
+  // so a slow answer for GW3 must not overwrite state after the user has
+  // already moved on to GW4.
+  const forGw = state.gw;
   try {
     // fresh=1 bypasses the server-side cache (manual ↻ refresh)
     const suffix = (fresh ? '&fresh=1' : '') + '&gw=' + state.gw;
@@ -385,9 +412,14 @@ async function refreshData(fresh) {
     const data = {};
     keys.forEach((k, i) => { data[k] = results[i]; });
 
+    // Cache it under the gw it was fetched for either way — it is still valid
+    // data, just not for the gameweek on screen any more.
+    if (data.matches) saveGwCache('matches', forGw, data.matches);
+    if (data.allSlips) saveGwCache('allslips', forGw, data.allSlips);
+    if (state.gw !== forGw) return;   // user moved on while this was in flight
+
     if (data.matches) {
       data.matches.forEach(m => { state.matches[m.match_id] = m; });
-      try { localStorage.setItem('epl2627_matches', JSON.stringify({ t: Date.now(), gw: state.gw, d: data.matches })); } catch(e) {}
     }
     if (data.players) {
       state.players = data.players;
@@ -397,32 +429,47 @@ async function refreshData(fresh) {
       state.allSlips = data.allSlips.map(parsePicks);
       // My slips derived from allSlips — no separate 'slips' call needed
       if (state.currentPlayer) state.slips = state.allSlips.filter(s => s.player === state.currentPlayer);
-      try { localStorage.setItem('epl2627_allslips', JSON.stringify({ t: Date.now(), gw: state.gw, d: data.allSlips })); } catch(e) {}
     }
   } catch (e) {
     console.warn('API unavailable, using cached data', e);
   }
 }
 
-// Move the whole app to another gameweek: refetch that gw's matches + slips,
-// then re-render whatever tab is open. Used by the pickers in ตารางแข่ง/แทงบอล.
+// Move the whole app to another gameweek. Paints first from data.js + the
+// per-gw cache and refetches in the background — the same trick init() uses.
+// It used to block on the fetch behind a spinner, which meant ~1.5-2 s of dead
+// screen on every ◀ ▶: Apps Script costs that much per call even when its own
+// cache hits, so waiting for it was the slowest thing in the app.
 async function switchGw(gw) {
   gw = Math.min(38, Math.max(1, Number(gw) || 1));
   if (gw === state.gw) return;
   state.gw = gw;
-  state.allSlips = [];
-  state.slips = [];
   // state.matches is deliberately NOT cleared: it is keyed by match_id and the
   // summary tab needs a whole month of scores in it, not just this gameweek's.
-  showLoading();
-  try {
-    await refreshData();
+  const cachedMatches = loadGwCache('matches', gw);
+  if (cachedMatches) cachedMatches.forEach(m => { state.matches[m.match_id] = m; });
+
+  const cachedSlips = loadGwCache('allslips', gw);
+  state.allSlips = cachedSlips ? cachedSlips.map(parsePicks) : [];
+  state.slips = state.currentPlayer
+    ? state.allSlips.filter(s => s.player === state.currentPlayer)
+    : [];
+
+  buildLinesFromMatches();
+  await renderCurrentView();
+  updateTabBadges();
+
+  // Then correct it from the server. No spinner when there was something to
+  // paint — but a gameweek with nothing cached has no lines yet, and the
+  // betting tab hides matches without lines, so that one would flash empty.
+  if (!cachedMatches) showLoading();
+  refreshData().then(() => {
+    if (state.gw !== gw) return;
     buildLinesFromMatches();
-    await renderCurrentView();
     updateTabBadges();
-  } finally {
-    hideLoading();
-  }
+    renderCurrentView();
+  }).catch(e => console.warn('switchGw background refresh failed', e))
+    .finally(() => { if (!cachedMatches) hideLoading(); });
 }
 
 // --- Odds freshness ---
@@ -447,7 +494,7 @@ async function refreshMatches(fresh) {
   if (!data || !data.length) return false;
   data.forEach(m => { state.matches[m.match_id] = m; });
   buildLinesFromMatches();
-  try { localStorage.setItem('epl2627_matches', JSON.stringify({ t: Date.now(), gw: state.gw, d: data })); } catch (e) {}
+  saveGwCache('matches', state.gw, data);
   return oddsSignature() !== before;
 }
 

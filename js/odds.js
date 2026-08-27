@@ -63,6 +63,24 @@ function renderBetStateControl(gw, lang) {
   return html;
 }
 
+const LINE_FIELDS = ['ah_line', 'ah_odds_h', 'ah_odds_a', 'ou_line', 'ou_odds_o', 'ou_odds_u'];
+
+// Mirror a saved update into state.matches so the tab can redraw without a
+// round trip. Only touches rows already loaded — a match_id we have never seen
+// is left for the background refetch rather than invented here.
+function applyLineUpdatesLocally(updates) {
+  updates.forEach(u => {
+    const m = state.matches[u.match_id];
+    if (!m) return;
+    LINE_FIELDS.forEach(f => {
+      if (u[f] === undefined) return;
+      m[f] = u[f] === '' ? '' : Number(u[f]);
+    });
+  });
+  buildLinesFromMatches();
+  saveGwCache('matches', state.gw, Object.values(state.matches).filter(m => Number(m.gw) === Number(state.gw)));
+}
+
 function renderOdds() {
   const container = document.getElementById('view-odds');
   if (!container) return;
@@ -137,8 +155,12 @@ function renderOdds() {
       try {
         const result = await setBetState(gw, want);
         if (result && result.success) {
-          await refreshMatches(true);   // fresh=1 so the buttons show what was written
+          // Same as the odds save: reflect it locally, read back in background
+          (MATCHES_BY_GW[gw] || []).forEach(m => {
+            if (state.matches[m.id]) state.matches[m.id].bet_state = want;
+          });
           renderOdds();
+          refreshMatches(true).catch(e => console.warn('bet_state read-back failed', e));
           const th = { auto: 'กลับไปใช้เวลาอัตโนมัติ', open: 'เปิดรับเต็งแล้ว', closed: 'ปิดรับเต็งแล้ว' };
           const en = { auto: 'Back to the time rule', open: 'Singles open', closed: 'Singles closed' };
           showToast((currentLang === 'th' ? th : en)[want]);
@@ -183,9 +205,15 @@ function renderOdds() {
     try {
       const result = await updateLines(updates);
       if (result && result.success) {
-        await refreshMatches(true);   // fresh=1 so we read back what was written
+        // The client knows exactly what it just wrote, so apply it locally and
+        // redraw now. Reading it back with fresh=1 first cost another ~3 s of
+        // spinner to learn what we already knew; that read still happens, just
+        // in the background, and corrects the screen if the Sheet disagrees.
+        applyLineUpdatesLocally(updates);
         renderOdds();
         showToast(currentLang === 'th' ? `บันทึกราคา ${updates.length} คู่แล้ว` : `Saved ${updates.length} matches`);
+        refreshMatches(true).then(moved => { if (moved) renderOdds(); })
+          .catch(e => console.warn('odds read-back failed', e));
       } else {
         showToast((result && result.error) || (currentLang === 'th' ? 'บันทึกไม่สำเร็จ' : 'Save failed'), 5000);
       }
