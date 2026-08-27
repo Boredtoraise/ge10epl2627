@@ -6,6 +6,8 @@ const state = {
   isAdmin: false,
   currentView: 'schedule',
   serverBuild: null, // Code.gs BUILD, as reported by the bootstrap response
+  gwLoading: null,   // gameweek whose odds are still on the way (no cache to show)
+  slipsLoadedGw: null, // gameweek whose slips are loaded — an empty round is still loaded
   gw: null,          // gameweek being viewed — every fetch is scoped to it
   standings: [],     // settled months: one row per player per month
   periodSlips: [],   // every slip of the current unsettled month (summary tab)
@@ -407,6 +409,7 @@ function init() {
     const cs = loadGwCache('allslips', state.gw);
     if (cs) {
       state.allSlips = cs.map(parsePicks);
+      state.slipsLoadedGw = state.gw;
       if (state.currentPlayer) state.slips = state.allSlips.filter(s => s.player === state.currentPlayer);
     }
   } catch(e) {}
@@ -481,8 +484,9 @@ async function refreshData(fresh) {
       state.players = data.players;
       try { localStorage.setItem('epl2627_players', JSON.stringify({ t: Date.now(), d: data.players })); } catch(e) {}
     }
-    if (data.allSlips) {
+    if (Array.isArray(data.allSlips)) {
       state.allSlips = data.allSlips.map(parsePicks);
+      state.slipsLoadedGw = forGw;   // so renderBetting does not refetch an empty round
       // My slips derived from allSlips — no separate 'slips' call needed
       if (state.currentPlayer) state.slips = state.allSlips.filter(s => s.player === state.currentPlayer);
     }
@@ -507,25 +511,31 @@ async function switchGw(gw) {
 
   const cachedSlips = loadGwCache('allslips', gw);
   state.allSlips = cachedSlips ? cachedSlips.map(parsePicks) : [];
+  state.slipsLoadedGw = cachedSlips ? gw : null;
   state.slips = state.currentPlayer
     ? state.allSlips.filter(s => s.player === state.currentPlayer)
     : [];
 
+  // Set BEFORE the first render, which is the render that has to say it: a
+  // gameweek with nothing cached has no odds yet and the betting tab hides
+  // matches without lines, so it says so inline (see renderBetting) rather than
+  // behind a blocking overlay. The overlay used to cover that gap, but the gap
+  // is only ~2 s when the backend behaves and was measured at 88 s when it did
+  // not — with the fixtures already drawn underneath the whole time.
+  state.gwLoading = cachedMatches ? null : gw;
+
   buildLinesFromMatches();
   await renderCurrentView();
   updateTabBadges();
-
-  // Then correct it from the server. No spinner when there was something to
-  // paint — but a gameweek with nothing cached has no lines yet, and the
-  // betting tab hides matches without lines, so that one would flash empty.
-  if (!cachedMatches) showLoading();
   refreshData().then(() => {
     if (state.gw !== gw) return;
     buildLinesFromMatches();
     updateTabBadges();
-    renderCurrentView();
   }).catch(e => console.warn('switchGw background refresh failed', e))
-    .finally(() => { if (!cachedMatches) hideLoading(); });
+    .finally(() => {
+      if (state.gwLoading === gw) state.gwLoading = null;
+      if (state.gw === gw) renderCurrentView();
+    });
 }
 
 // --- Odds freshness ---
