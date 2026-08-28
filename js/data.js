@@ -471,9 +471,9 @@ const BET_RULES = {
   MIN_BET: 10,
   MAX_SINGLE: 3000,        // 1 pick. Steps have no stake cap — MAX_PAYOUT bounds them.
   MAX_PAYOUT: 10000,       // per slip
-  // The admin can override the OPENING per gameweek (bet_state, ราคา tab) —
-  // see betStateOfGw() in app.js. The cutoffs below always apply.
-  SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before the gameweek's FIRST kickoff...
+  // The admin can override the OPENING per session (bet_state, ราคา tab) —
+  // see betStateOfMatch() in app.js. The cutoffs below always apply.
+  SINGLE_OPEN_MIN: 180,    // เต็ง opens 3 h before the SESSION's first kickoff...
   SINGLE_OPEN_HOUR_TH: 18, // ...or 18:00 Thai that day, whichever is earlier
   SINGLE_CUTOFF_MIN: 10,   // เต็ง closes 10 min before kickoff
   STEP_CUTOFF_MIN: 10,     // steps: open any time until 10 min before
@@ -516,11 +516,34 @@ function periodLabel(period, lang) {
   return `${(lang === 'th' ? th : en)[m - 1]} ${y}`;
 }
 
-// When เต็ง betting opens for a gameweek: 3 h before its earliest kickoff, or
-// 18:00 Thai that day if that is earlier. The whole round opens at once, and a
-// 02:00 kickoff never pushes the opening to 23:00.
-function singleOpensAt(gw) {
-  const ms = MATCHES_BY_GW[gw] || [];
+// Kickoffs group into playing SESSIONS, not gameweeks: an EPL round runs
+// Sat–Mon, so a gameweek-wide window would take a Monday bet on Friday at a
+// price set days earlier. The day is cut at 14:00 Thai — the same boundary
+// isMatchToday() uses — so a 02:00 kickoff belongs to the previous evening's
+// session. Mirrors sessionKeyOfKickoff() in Code.gs; `match.date` is the
+// Sheet's date_th once matches load (see app.js), so a moved fixture buckets
+// the same on both sides.
+const SESSION_CUT_H = 14;
+function sessionKeyOf(match) {
+  const t = match ? kickoffUtc(match.date).getTime() : NaN;
+  if (isNaN(t)) return null;
+  return Math.floor((t + 7 * 3600000 - SESSION_CUT_H * 3600000) / 86400000);
+}
+
+// Every match of one session, in kickoff order.
+function sessionMatches(match) {
+  const key = sessionKeyOf(match);
+  if (key === null) return [];
+  return (MATCHES_BY_GW[match.gw] || [])
+    .filter(m => sessionKeyOf(m) === key)
+    .sort((a, b) => kickoffUtc(a.date) - kickoffUtc(b.date));
+}
+
+// When เต็ง betting opens for a match: 3 h before its SESSION's earliest
+// kickoff, or 18:00 Thai that day if that is earlier. The session opens at once,
+// and a 02:00 kickoff never pushes the opening to 23:00.
+function singleOpensAt(match) {
+  const ms = sessionMatches(match);
   if (!ms.length) return 0;
   const first = Math.min.apply(null, ms.map(m => kickoffUtc(m.date).getTime()));
   const threeHoursBefore = first - BET_RULES.SINGLE_OPEN_MIN * 60 * 1000;

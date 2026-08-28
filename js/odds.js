@@ -31,14 +31,29 @@ function oddsSelect(cls, id, field, value, choices, blankLabel) {
   return html;
 }
 
-// เต็ง open / close for the whole gameweek, so the odds can be set and the
-// round opened in the same place. 'auto' is the default and the safe one: it
-// leaves the time rule in charge, so a forgotten button never locks a gameweek.
-// Neither override touches the per-match cutoff — a match still closes 10 min
-// before its own kickoff — and steps are not affected at all.
-function renderBetStateControl(gw, lang) {
-  const cur = betStateOfGw(gw);
-  const opensAt = singleOpensAt(gw);
+// A session's date, from its key: the key counts days from the 14:00 Thai cut,
+// so key * 86400000 read with UTC getters is that session's Thai calendar day.
+function sessionLabel(key, lang) {
+  const d = new Date(key * 86400000);
+  const th = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const en = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const days = lang === 'th'
+    ? ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.']
+    : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return `${days[d.getUTCDay()]} ${d.getUTCDate()} ${(lang === 'th' ? th : en)[d.getUTCMonth()]}`;
+}
+
+// เต็ง open / close for ONE session, so the odds can be set and that day's
+// matches opened in the same place. An EPL round runs Sat–Mon, and opening the
+// whole gameweek meant a Monday match took bets from Friday at a price set days
+// earlier — so the unit here is the session, not the gameweek.
+// 'auto' is the default and the safe one: it leaves the time rule in charge, so
+// a forgotten button never locks a session. Neither override touches the
+// per-match cutoff — a match still closes 10 min before its own kickoff — and
+// steps are not affected at all.
+function renderBetStateControl(sessionKey, matches, lang) {
+  const cur = betStateOfSession(matches[0]);
+  const opensAt = singleOpensAt(matches[0]);
   const t = new Date(opensAt + 7 * 3600 * 1000);
   const when = `${t.getUTCDate()}/${t.getUTCMonth() + 1} ${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
   const hint = cur === 'open'
@@ -54,9 +69,10 @@ function renderBetStateControl(gw, lang) {
   ];
 
   let html = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">`;
-  html += `<span style="font-size:0.78rem;color:var(--text-muted);min-width:32px">${lang === 'th' ? 'เต็ง' : 'Singles'}</span>`;
+  html += `<span style="font-weight:700;font-size:0.82rem;min-width:62px">${sessionLabel(sessionKey, lang)}</span>`;
+  html += `<span style="font-size:0.78rem;color:var(--text-muted)">${lang === 'th' ? 'เต็ง' : 'Singles'}</span>`;
   opts.forEach(([v, label]) => {
-    html += `<button class="bet-state-btn" data-state="${v}" style="${cur === v ? SUBTAB_ON : SUBTAB_OFF}">${label}</button>`;
+    html += `<button class="bet-state-btn" data-session="${sessionKey}" data-state="${v}" style="${cur === v ? SUBTAB_ON : SUBTAB_OFF}">${label}</button>`;
   });
   html += `<span style="font-size:0.72rem;color:var(--text-muted)">${hint}</span>`;
   html += `</div>`;
@@ -94,48 +110,60 @@ function renderOdds() {
   const gw = state.gw || currentGw();
   const matches = (MATCHES_BY_GW[gw] || []).slice().sort((a, b) => kickoffUtc(a.date) - kickoffUtc(b.date));
 
+  // Matches are already in kickoff order and a session key rises with kickoff,
+  // so the groups come out contiguous.
+  const sessions = [];
+  matches.forEach(m => {
+    const key = sessionKeyOf(m);
+    const last = sessions[sessions.length - 1];
+    if (last && last.key === key) last.matches.push(m);
+    else sessions.push({ key: key, matches: [m] });
+  });
+
   let html = renderGwPicker(gw, lang);
-  html += renderBetStateControl(gw, lang);
   html += `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">${lang === 'th'
     ? 'ตั้งราคาแล้วกดบันทึก — เพื่อนเห็นราคาใหม่ทันที (AH อิงเจ้าบ้าน: ลบ=ต่อ บวก=รอง)'
     : 'Set the lines and save — friends see the new price immediately (AH is from the home side)'}</div>`;
 
-  matches.forEach(m => {
-    const locked = isMatchLocked(m);
-    const t1 = getTeamLabel(m.team1, lang);
-    const t2 = getTeamLabel(m.team2, lang);
-    const ahLine = state.ahLines[m.id] != null ? state.ahLines[m.id] : '';
-    const ouLine = state.ouLines[m.id] != null ? state.ouLines[m.id] : '';
+  sessions.forEach(s => {
+    html += renderBetStateControl(s.key, s.matches, lang);
+    s.matches.forEach(m => {
+      const locked = isMatchLocked(m);
+      const t1 = getTeamLabel(m.team1, lang);
+      const t2 = getTeamLabel(m.team2, lang);
+      const ahLine = state.ahLines[m.id] != null ? state.ahLines[m.id] : '';
+      const ouLine = state.ouLines[m.id] != null ? state.ouLines[m.id] : '';
 
-    html += `<div class="card" style="padding:10px;margin-bottom:8px${locked ? ';opacity:0.55' : ''}">`;
-    html += `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px">`;
-    html += `<div style="font-weight:700;font-size:0.9rem">${t1} <span style="color:var(--text-muted);font-weight:400">v</span> ${t2}</div>`;
-    html += `<div style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap">${formatMatchDate(m, lang)}${locked ? ' · ' + (lang === 'th' ? 'ปิดแล้ว' : 'closed') : ''}</div>`;
-    html += `</div>`;
+      html += `<div class="card" style="padding:10px;margin-bottom:8px${locked ? ';opacity:0.55' : ''}">`;
+      html += `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px">`;
+      html += `<div style="font-weight:700;font-size:0.9rem">${t1} <span style="color:var(--text-muted);font-weight:400">v</span> ${t2}</div>`;
+      html += `<div style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap">${formatMatchDate(m, lang)}${locked ? ' · ' + (lang === 'th' ? 'ปิดแล้ว' : 'closed') : ''}</div>`;
+      html += `</div>`;
 
-    if (!locked) {
-      html += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.78rem">`;
-      const ahNum = parseFloat(ahLine);
-      const favTxt = !ahLine || ahNum === 0 ? (lang === 'th' ? 'ราคาเท่ากัน' : 'level')
-        : ahNum < 0 ? `${t1} ${lang === 'th' ? 'ต่อ' : 'gives'} ${Math.abs(ahNum)}`
-        : `${t2} ${lang === 'th' ? 'ต่อ' : 'gives'} ${ahNum}`;
-      html += `<span style="min-width:26px;color:var(--text-muted)">AH</span>`;
-      html += oddsSelect('', m.id, 'ah_line', ahLine, ahLineChoices(), lang === 'th' ? 'ไม่มี' : 'none');
-      html += oddsSelect('', m.id, 'ah_odds_h', state.ahOddsH[m.id] || '', ODDS_CHOICES, t1 + '?');
-      html += oddsSelect('', m.id, 'ah_odds_a', state.ahOddsA[m.id] || '', ODDS_CHOICES, t2 + '?');
-      html += `<span style="font-size:0.72rem;color:var(--text-muted)">${favTxt}</span>`;
+      if (!locked) {
+        html += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.78rem">`;
+        const ahNum = parseFloat(ahLine);
+        const favTxt = !ahLine || ahNum === 0 ? (lang === 'th' ? 'ราคาเท่ากัน' : 'level')
+          : ahNum < 0 ? `${t1} ${lang === 'th' ? 'ต่อ' : 'gives'} ${Math.abs(ahNum)}`
+          : `${t2} ${lang === 'th' ? 'ต่อ' : 'gives'} ${ahNum}`;
+        html += `<span style="min-width:26px;color:var(--text-muted)">AH</span>`;
+        html += oddsSelect('', m.id, 'ah_line', ahLine, ahLineChoices(), lang === 'th' ? 'ไม่มี' : 'none');
+        html += oddsSelect('', m.id, 'ah_odds_h', state.ahOddsH[m.id] || '', ODDS_CHOICES, t1 + '?');
+        html += oddsSelect('', m.id, 'ah_odds_a', state.ahOddsA[m.id] || '', ODDS_CHOICES, t2 + '?');
+        html += `<span style="font-size:0.72rem;color:var(--text-muted)">${favTxt}</span>`;
+        html += `</div>`;
+        html += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.78rem;margin-top:5px">`;
+        html += `<span style="min-width:26px;color:var(--text-muted)">${lang === 'th' ? 'สูงต่ำ' : 'O/U'}</span>`;
+        html += oddsSelect('', m.id, 'ou_line', ouLine, ouLineChoices(), lang === 'th' ? 'ไม่มี' : 'none');
+        html += oddsSelect('', m.id, 'ou_odds_o', state.ouOddsO[m.id] || '', ODDS_CHOICES, lang === 'th' ? 'สูง' : 'O');
+        html += oddsSelect('', m.id, 'ou_odds_u', state.ouOddsU[m.id] || '', ODDS_CHOICES, lang === 'th' ? 'ต่ำ' : 'U');
+        html += `</div>`;
+      } else {
+        html += `<div style="font-size:0.78rem;color:var(--text-muted)">AH ${ahLine || '-'} · ${lang === 'th' ? 'สูงต่ำ' : 'O/U'} ${ouLine || '-'}</div>`;
+      }
       html += `</div>`;
-      html += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.78rem;margin-top:5px">`;
-      html += `<span style="min-width:26px;color:var(--text-muted)">${lang === 'th' ? 'สูงต่ำ' : 'O/U'}</span>`;
-      html += oddsSelect('', m.id, 'ou_line', ouLine, ouLineChoices(), lang === 'th' ? 'ไม่มี' : 'none');
-      html += oddsSelect('', m.id, 'ou_odds_o', state.ouOddsO[m.id] || '', ODDS_CHOICES, lang === 'th' ? 'สูง' : 'O');
-      html += oddsSelect('', m.id, 'ou_odds_u', state.ouOddsU[m.id] || '', ODDS_CHOICES, lang === 'th' ? 'ต่ำ' : 'U');
-      html += `</div>`;
-    } else {
-      html += `<div style="font-size:0.78rem;color:var(--text-muted)">AH ${ahLine || '-'} · ${lang === 'th' ? 'สูงต่ำ' : 'O/U'} ${ouLine || '-'}</div>`;
-    }
-    html += `</div>`;
-  });
+    });
+    });
 
   html += `<div style="display:flex;gap:8px;align-items:center;margin:12px 0 24px">`;
   html += `<button id="odds-save" class="btn btn-primary" style="flex:1">${lang === 'th' ? 'บันทึกราคา' : 'Save odds'}</button>`;
@@ -151,12 +179,15 @@ function renderOdds() {
       // stale (offline load), pressing Auto must still be able to clear a
       // 'closed' the Sheet is actually holding.
       const want = btn.dataset.state;
+      const key = Number(btn.dataset.session);
+      const ms = (sessions.find(s => s.key === key) || { matches: [] }).matches;
+      if (!ms.length) return;
       showLoading();
       try {
-        const result = await setBetState(gw, want);
+        const result = await setBetState(gw, want, ms.map(m => m.id));
         if (result && result.success) {
           // Same as the odds save: reflect it locally, read back in background
-          (MATCHES_BY_GW[gw] || []).forEach(m => {
+          ms.forEach(m => {
             if (state.matches[m.id]) state.matches[m.id].bet_state = want;
           });
           renderOdds();

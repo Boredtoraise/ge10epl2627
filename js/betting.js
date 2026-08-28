@@ -622,16 +622,16 @@ async function renderBetting() {
       return;
     }
     // เต็ง has an opening time too — say when, rather than just refusing.
-    // The admin can override the opening per gameweek from the ราคา tab; the
+    // The admin can override the opening per session from the ราคา tab; the
     // server checks the same thing, this is only so the message is instant.
     if (!isStepSlip) {
       const sm = (state.matchById && state.matchById[pickEntries[0][1].matchId]);
-      const betState = sm ? betStateOfGw(sm.gw) : 'auto';
+      const betState = sm ? betStateOfMatch(sm) : 'auto';
       if (betState === 'closed') {
         showToast(lang === 'th' ? 'ตอนนี้ปิดรับเต็ง — สเต็ปยังแทงได้' : 'Singles are closed right now — steps are still open', 5000);
         return;
       }
-      const opensAt = sm && betState === 'auto' ? singleOpensAt(sm.gw) : 0;
+      const opensAt = sm && betState === 'auto' ? singleOpensAt(sm) : 0;
       if (opensAt && Date.now() < opensAt) {
         const t = new Date(opensAt + 7 * 3600 * 1000);
         const d = `${t.getUTCDate()}/${t.getUTCMonth() + 1}`;
@@ -688,10 +688,10 @@ async function renderBetting() {
           return;
         }
         if (result.code === 'single_too_early') {
-          showToast(lang === 'th' ? 'เต็งยังไม่เปิดสำหรับนัดนี้' : 'Singles are not open yet for this gameweek', 5000);
+          showToast(lang === 'th' ? 'เต็งยังไม่เปิดสำหรับคู่นี้' : 'Singles are not open yet for this match', 5000);
           return;
         }
-        // Admin closed เต็ง for this gameweek while the tab was open
+        // Admin closed เต็ง for this session while the tab was open
         if (result.code === 'bet_closed') {
           showToast(lang === 'th' ? 'ตอนนี้ปิดรับเต็ง — สเต็ปยังแทงได้' : 'Singles are closed right now — steps are still open', 5000);
           await refreshMatches(true);

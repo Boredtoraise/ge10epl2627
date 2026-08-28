@@ -171,7 +171,8 @@ async function updateLines(updates) {
 // Open / close เต็ง for one gameweek by hand: 'auto' | 'open' | 'closed'.
 // Server-side it writes `bet_state` on that gameweek's matches rows and clears
 // the same caches update_lines does, so the change is live in seconds.
-async function setBetState(gw, betState) {
+// matchIds scopes the write to one session's rows; omit it for the whole gw.
+async function setBetState(gw, betState, matchIds) {
   try {
     const res = await fetch(API_BASE_URL, {
       method: 'POST',
@@ -182,6 +183,7 @@ async function setBetState(gw, betState) {
         pin: localStorage.getItem('epl2627_pin'),
         gw: gw,
         state: betState,
+        match_ids: matchIds || [],
       }),
     });
     return await res.json();

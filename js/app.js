@@ -58,19 +58,24 @@ function isMatchLocked(match) {
   return timePassed || hasScore || isMatchPostponed(match);
 }
 
-// เต็ง window override for a gameweek, set from the ราคา tab and stored in
-// `bet_state` on that gameweek's matches rows: 'open' / 'closed' beat the time
+// เต็ง window override for one match, set from the ราคา tab a session at a time
+// and stored in `bet_state` on that match's row: 'open' / 'closed' beat the time
 // rule, anything else means 'auto' (the time rule decides). It only moves the
 // OPENING of เต็ง — isMatchLocked above still closes each match on its own
 // kickoff in every state — and steps are not on this window at all.
-function betStateOfGw(gw) {
-  const ms = MATCHES_BY_GW[gw] || [];
-  for (let i = 0; i < ms.length; i++) {
-    const row = state.matches[ms[i].id];
-    const v = row && String(row.bet_state || '').trim().toLowerCase();
-    if (v === 'open' || v === 'closed') return v;
-  }
-  return 'auto';
+function betStateOfMatch(match) {
+  const row = match && state.matches[match.id];
+  const v = row && String(row.bet_state || '').trim().toLowerCase();
+  return (v === 'open' || v === 'closed') ? v : 'auto';
+}
+
+// The state of a whole session, for the ราคา tab's buttons: 'auto' unless every
+// match of the session agrees on an override.
+function betStateOfSession(match) {
+  const ms = sessionMatches(match);
+  if (!ms.length) return 'auto';
+  const first = betStateOfMatch(ms[0]);
+  return ms.every(m => betStateOfMatch(m) === first) ? first : 'auto';
 }
 
 // A postponed EPL match takes no new bets. Slips already holding it stay pending
