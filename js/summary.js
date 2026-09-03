@@ -552,7 +552,11 @@ function renderFunLeaderboard() {
     return { player, wins, losses, totalBet, totalProfit, seasonProfit, carry, settled, winRate, streakVal, streakDir, hasStep, hasSingle };
   });
 
-  const active = stats.filter(s => s.settled > 0 || s.totalBet > 0);
+  // carry.hasHistory keeps a player on the board once their months are settled:
+  // archiving empties `slips`, so settled/totalBet both fall to 0 and a
+  // slips-only filter would blank the whole leaderboard the moment a month is
+  // closed — even though seasonProfit below still has their money.
+  const active = stats.filter(s => s.settled > 0 || s.totalBet > 0 || s.carry.hasHistory);
   if (!active.length) return `<div style="text-align:center;padding:24px;color:var(--text-muted)">ยังไม่มีข้อมูล</div>`;
 
   // Ranked on the season, not the month — that's the number people actually owe
