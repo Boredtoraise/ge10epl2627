@@ -213,7 +213,11 @@ function renderUserDashboard(player) {
     const approvedPnl   = allSlipsAll2
       .filter(s => s.player === player && s.status === 'approved')
       .reduce((sum, s) => sum + resolveSlip(s).profit, 0);
-    const currentBal    = initialBal + approvedPnl;
+    // Settled months are no longer in `slips`, so approvedPnl only covers the
+    // running month — without the carry the balance snaps back to the starting
+    // figure the moment a month is archived.
+    const settledPnl    = getSeasonCarry(player).money;
+    const currentBal    = initialBal + settledPnl + approvedPnl;
     const balColor      = currentBal >= initialBal ? 'var(--accent)' : 'var(--secondary)';
     const pnlColor      = approvedPnl >= 0 ? 'var(--accent)' : 'var(--secondary)';
 
@@ -776,7 +780,8 @@ function renderFunLeaderboard() {
     html += `<div style="font-size:1.15rem;font-weight:800;color:${profitColor}">${profitStr}</div>`;
     if (initBal !== null) {
       const approvedPnl = approvedPnlByPlayer[s.player] || 0;
-      const balance = initBal + approvedPnl;
+      // s.carry.money covers the archived months — see the balance card above
+      const balance = initBal + s.carry.money + approvedPnl;
       const balColor = balance > 0 ? 'var(--accent)' : '#ef4444';
       html += `<div style="font-size:0.82rem;font-weight:700;color:${balColor}">💰 ${balance.toLocaleString('th-TH')}</div>`;
     }

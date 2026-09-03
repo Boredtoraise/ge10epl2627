@@ -231,6 +231,7 @@ async function renderCurrentView() {
     case 'bet': renderBetting(); break;
     case 'summary': await renderSummaryLazy(); break;
     case 'odds': renderOdds(); break;
+    case 'balance': await renderBalanceLazy(); break;
     case 'insight': renderInsight(); break;
   }
 }
@@ -240,7 +241,19 @@ async function renderCurrentView() {
 // read — the live slips tab IS the current period, since settled months are
 // moved to slips_archive.
 async function renderSummaryLazy() {
-  const container = document.getElementById('view-summary');
+  await ensureSummaryData(document.getElementById('view-summary'));
+  renderSummary();
+}
+
+// The ยอดค้าง tab needs exactly the same two reads, so it shares this loader
+// rather than issuing its own — Apps Script runs one execution at a time and a
+// second copy of the chain would just queue behind the first.
+async function renderBalanceLazy() {
+  await ensureSummaryData(document.getElementById('view-balance'));
+  renderBalance();
+}
+
+async function ensureSummaryData(container) {
   if (!state.periodSlips.length && API_BASE_URL && !state._fetchingPeriod) {
     state._fetchingPeriod = true;
     let sk = '';
@@ -293,7 +306,6 @@ async function renderSummaryLazy() {
       state._fetchingPeriod = false;
     }
   }
-  renderSummary();
 }
 
 // --- Toast ---
