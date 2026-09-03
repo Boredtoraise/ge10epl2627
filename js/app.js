@@ -10,6 +10,7 @@ const state = {
   slipsLoadedGw: null, // gameweek whose slips are loaded — an empty round is still loaded
   gw: null,          // gameweek being viewed — every fetch is scoped to it
   standings: [],     // settled months: one row per player per month
+  settledPeriods: [], // which months are already settled (localStorage, for the settle badge)
   periodSlips: [],   // every slip of the current unsettled month (summary tab)
   matches: {},
   players: [],
@@ -301,7 +302,7 @@ async function ensureSummaryData(container) {
         state.periodSlips = periodSlips.map(parsePicks);
         try { localStorage.setItem('epl2627_periodslips', JSON.stringify({ t: Date.now(), d: periodSlips })); } catch (e) {}
       }
-      if (standings) state.standings = standings;
+      if (standings) { state.standings = standings; saveSettledPeriods(standings); }
     } finally {
       state._fetchingPeriod = false;
     }
@@ -323,6 +324,42 @@ function showToast(msg, duration) {
 }
 
 // --- Badge (admin: pending approve count) ---
+// --- Settle reminder ---
+//
+// Which months have already been settled. Cached because bootstrap is
+// gameweek-scoped on purpose and never reads `standings` — without this the app
+// would have to be told the whole season's state on every launch just to draw
+// one badge. The list only ever grows, so a stale copy costs at most one extra
+// badge until the สรุป tab refreshes it.
+function loadSettledPeriods() {
+  try { return JSON.parse(localStorage.getItem('epl2627_settled') || '[]'); } catch (e) { return []; }
+}
+
+function saveSettledPeriods(standings) {
+  const periods = [...new Set((standings || []).map(r => String(r.period)).filter(Boolean))];
+  state.settledPeriods = periods;
+  try { localStorage.setItem('epl2627_settled', JSON.stringify(periods)); } catch (e) {}
+}
+
+// The earliest month whose last match has finished and that has not been
+// settled — or null. Derived from data.js and the clock, so it is right the
+// moment the app opens, with no fetch. `state.matches` overrides the static
+// kickoff once loaded, so a fixture moved for TV moves this too.
+const SETTLE_AFTER_MS = 3 * 3600000;   // the last match has to actually finish
+function settleDuePeriod() {
+  const settled = state.settledPeriods || [];
+  const lastKick = {};
+  MATCHES.forEach(m => {
+    const row = state.matches[m.id];
+    const d = (row && row.date_th) ? String(row.date_th).slice(0, 16) : m.date;
+    const t = kickoffUtc(d).getTime();
+    if (!isNaN(t) && (lastKick[m.period] === undefined || t > lastKick[m.period])) lastKick[m.period] = t;
+  });
+  const now = Date.now();
+  return Object.keys(lastKick).sort()
+    .find(p => settled.indexOf(p) < 0 && now > lastKick[p] + SETTLE_AFTER_MS) || null;
+}
+
 function updateTabBadges() {
   const count = (state.isAdmin && state.allSlips.length)
     ? state.allSlips.filter(s => {
@@ -335,6 +372,16 @@ function updateTabBadges() {
   document.querySelectorAll('.bet-badge').forEach(b => {
     if (count > 0) { b.textContent = count; b.classList.remove('hidden'); }
     else b.classList.add('hidden');
+  });
+
+  // Only the admin can settle, so only the admin is nagged about it.
+  const due = state.isAdmin ? settleDuePeriod() : null;
+  document.querySelectorAll('.settle-badge').forEach(b => {
+    if (due) {
+      b.textContent = '!';
+      b.title = 'ปิดยอด ' + periodLabel(due, 'th') + ' ได้แล้ว';
+      b.classList.remove('hidden');
+    } else b.classList.add('hidden');
   });
 }
 
@@ -399,6 +446,7 @@ function init() {
   const savedPlayer = localStorage.getItem('epl2627_player');
   if (savedPlayer) state.currentPlayer = savedPlayer;
   if (localStorage.getItem('epl2627_admin') === 'true') state.isAdmin = true;
+  state.settledPeriods = loadSettledPeriods();
 
   window.addEventListener('hashchange', () => {
     const hash = location.hash.slice(1) || 'schedule';
