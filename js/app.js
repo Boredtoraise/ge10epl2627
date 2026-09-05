@@ -11,6 +11,7 @@ const state = {
   gw: null,          // gameweek being viewed — every fetch is scoped to it
   standings: [],     // settled months: one row per player per month
   settledPeriods: [], // which months are already settled (localStorage, for the settle badge)
+  clockOffset: 0,    // serverTime - deviceTime, so a wrong device clock cannot close betting early
   periodSlips: [],   // every slip of the current unsettled month (summary tab)
   matches: {},
   players: [],
@@ -41,19 +42,65 @@ function parsePicks(s) {
   try { return { ...s, picks: JSON.parse(s.picks_json || '[]') }; } catch (e) { return { ...s, picks: [] }; }
 }
 
+// --- Trusted clock ---
+//
+// Every betting cutoff is enforced against the CLIENT's clock (isMatchLocked is
+// client-only by design), so a device whose clock runs fast silently files an
+// open match under "ปิดรับแทงแล้ว" and the person simply cannot bet, with no
+// error to explain it. That is not hypothetical — it is how a real evening was
+// lost.
+//
+// GitHub Pages serves this app, so a HEAD request to our own origin is
+// same-origin and its `Date` header is readable (cross-origin it would not be:
+// `Date` is not CORS-safelisted). One request at startup gives the offset
+// between that clock and the device's.
+//
+// Everything time-critical goes through nowMs(). On failure the offset stays 0
+// and behaviour is exactly what it was before.
+function nowMs() { return Date.now() + (state.clockOffset || 0); }
+
+async function syncClock() {
+  try {
+    const res = await fetch(location.pathname + '?t=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+    const d = res.headers.get('date');
+    if (!d) return;
+    const server = new Date(d).getTime();
+    if (isNaN(server)) return;
+    state.clockOffset = server - Date.now();
+    if (Math.abs(state.clockOffset) > 120000) {
+      console.warn('device clock is off by', Math.round(state.clockOffset / 1000), 's');
+      renderClockWarning();
+    }
+    if (typeof renderCurrentView === 'function') renderCurrentView();
+  } catch (e) { /* offline or blocked: keep the device clock */ }
+}
+
+// The person cannot fix what they cannot see, so say it plainly and say which
+// way it is wrong — a fast clock closes betting early, a slow one lets a bet
+// through that the server will then reject.
+function renderClockWarning() {
+  const mins = Math.round(state.clockOffset / 60000);
+  const el = document.getElementById('clock-warning');
+  if (!el) return;
+  el.textContent = mins < 0
+    ? `⚠ นาฬิกาเครื่องนี้เร็วไป ${Math.abs(mins)} นาที — ปิดรับแทงเร็วกว่าจริง ตั้งเวลาอัตโนมัติในเครื่องด้วย`
+    : `⚠ นาฬิกาเครื่องนี้ช้าไป ${mins} นาที — ตั้งเวลาอัตโนมัติในเครื่องด้วย`;
+  el.classList.remove('hidden');
+}
+
 function isMatchToday(match) {
   // "วันแข่ง" เริ่มที่ 14:00 ไทย — shift boundary จาก midnight เป็น 14:00
   const THAI = 7 * 3600000;
   const CUT  = 14 * 3600000;
   const matchDay = Math.floor((kickoffUtc(match.date).getTime() + THAI - CUT) / 86400000);
-  const nowDay   = Math.floor((Date.now()                     + THAI - CUT) / 86400000);
+  const nowDay   = Math.floor((nowMs()                        + THAI - CUT) / 86400000);
   return matchDay === nowDay;
 }
 
 // Check if match is locked (kickoff passed OR has score OR postponed)
 function isMatchLocked(match) {
   const thaiTime = kickoffUtc(match.date);
-  const timePassed = new Date() >= new Date(thaiTime.getTime() - 10 * 60 * 1000);
+  const timePassed = nowMs() >= thaiTime.getTime() - 10 * 60 * 1000;
   const result = state.matches[match.id];
   const hasScore = result && typeof result.team1_score === 'number' && typeof result.team2_score === 'number';
   return timePassed || hasScore || isMatchPostponed(match);
@@ -447,6 +494,7 @@ function init() {
   if (savedPlayer) state.currentPlayer = savedPlayer;
   if (localStorage.getItem('epl2627_admin') === 'true') state.isAdmin = true;
   state.settledPeriods = loadSettledPeriods();
+  syncClock();   // never awaited — first paint must not wait for it
 
   window.addEventListener('hashchange', () => {
     const hash = location.hash.slice(1) || 'schedule';

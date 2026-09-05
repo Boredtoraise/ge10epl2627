@@ -615,7 +615,7 @@ async function renderBetting() {
     const cutoffMs = (isStepSlip ? BET_RULES.STEP_CUTOFF_MIN : BET_RULES.SINGLE_CUTOFF_MIN) * 60 * 1000;
     const tooLate = pickEntries.some(([, d]) => {
       const m = (state.matchById && state.matchById[d.matchId]);
-      return m && Date.now() >= kickoffUtc(m.date).getTime() - cutoffMs;
+      return m && nowMs() >= kickoffUtc(m.date).getTime() - cutoffMs;
     });
     if (tooLate) {
       showToast(lang === 'th' ? 'คู่นี้ปิดรับแทงแล้ว' : 'Match is closed', 5000);
@@ -632,7 +632,7 @@ async function renderBetting() {
         return;
       }
       const opensAt = sm && betState === 'auto' ? singleOpensAt(sm) : 0;
-      if (opensAt && Date.now() < opensAt) {
+      if (opensAt && nowMs() < opensAt) {
         const t = new Date(opensAt + 7 * 3600 * 1000);
         const d = `${t.getUTCDate()}/${t.getUTCMonth() + 1}`;
         const hhmm = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
@@ -1226,7 +1226,7 @@ function renderSlipCard(slip, opts) {
           const t = m ? kickoffUtc(m.date).getTime() - 10 * 60 * 1000 : Infinity;
           return Math.min(min, t);
         }, Infinity);
-        const msLeft = earliest - Date.now();
+        const msLeft = earliest - nowMs();
         if (msLeft > 0) {
           const h = Math.floor(msLeft / 3600000);
           const m = Math.floor((msLeft % 3600000) / 60000);
