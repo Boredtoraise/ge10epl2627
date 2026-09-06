@@ -618,7 +618,7 @@ async function renderBetting() {
       return m && nowMs() >= kickoffUtc(m.date).getTime() - cutoffMs;
     });
     if (tooLate) {
-      showToast(lang === 'th' ? 'คู่นี้ปิดรับแทงแล้ว' : 'Match is closed', 5000);
+      showToast((lang === 'th' ? 'คู่นี้ปิดรับแทงแล้ว' : 'Match is closed') + ' [c1]', 5000);
       return;
     }
     // เต็ง has an opening time too — say when, rather than just refusing.
@@ -628,7 +628,7 @@ async function renderBetting() {
       const sm = (state.matchById && state.matchById[pickEntries[0][1].matchId]);
       const betState = sm ? betStateOfMatch(sm) : 'auto';
       if (betState === 'closed') {
-        showToast(lang === 'th' ? 'ตอนนี้ปิดรับเต็ง — สเต็ปยังแทงได้' : 'Singles are closed right now — steps are still open', 5000);
+        showToast((lang === 'th' ? 'ตอนนี้ปิดรับเต็ง — สเต็ปยังแทงได้' : 'Singles are closed right now — steps are still open') + ' [c2]', 5000);
         return;
       }
       const opensAt = sm && betState === 'auto' ? singleOpensAt(sm) : 0;
@@ -636,9 +636,9 @@ async function renderBetting() {
         const t = new Date(opensAt + 7 * 3600 * 1000);
         const d = `${t.getUTCDate()}/${t.getUTCMonth() + 1}`;
         const hhmm = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
-        showToast(lang === 'th'
+        showToast((lang === 'th'
           ? `เต็งยังไม่เปิด — เปิด ${d} ${hhmm} น.`
-          : `Singles not open yet — opens ${d} ${hhmm}`, 6000);
+          : `Singles not open yet — opens ${d} ${hhmm}`) + ' [c3]', 6000);
         return;
       }
     }
@@ -688,12 +688,12 @@ async function renderBetting() {
           return;
         }
         if (result.code === 'single_too_early') {
-          showToast(lang === 'th' ? 'เต็งยังไม่เปิดสำหรับคู่นี้' : 'Singles are not open yet for this match', 5000);
+          showToast((lang === 'th' ? 'เต็งยังไม่เปิดสำหรับคู่นี้' : 'Singles are not open yet for this match') + ' [s:early]', 5000);
           return;
         }
         // Admin closed เต็ง for this session while the tab was open
         if (result.code === 'bet_closed') {
-          showToast(lang === 'th' ? 'ตอนนี้ปิดรับเต็ง — สเต็ปยังแทงได้' : 'Singles are closed right now — steps are still open', 5000);
+          showToast((lang === 'th' ? 'ตอนนี้ปิดรับเต็ง — สเต็ปยังแทงได้' : 'Singles are closed right now — steps are still open') + ' [s:closed]', 5000);
           await refreshMatches(true);
           return;
         }
@@ -708,7 +708,7 @@ async function renderBetting() {
           return;
         }
         if (result.code === 'match_locked') {
-          showToast(lang === 'th' ? 'คู่นี้ปิดรับแทงแล้ว' : 'Match is closed', 5000);
+          showToast((lang === 'th' ? 'คู่นี้ปิดรับแทงแล้ว' : 'Match is closed') + ' [s:locked]', 5000);
           await refreshMatches();
           renderBetting();
           return;
