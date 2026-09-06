@@ -12,6 +12,7 @@ const state = {
   standings: [],     // settled months: one row per player per month
   settledPeriods: [], // which months are already settled (localStorage, for the settle badge)
   clockOffset: 0,    // serverTime - deviceTime, so a wrong device clock cannot close betting early
+  staleBuild: null,  // the deployed ?v= when this tab is running an older one
   periodSlips: [],   // every slip of the current unsettled month (summary tab)
   matches: {},
   players: [],
@@ -59,20 +60,45 @@ function parsePicks(s) {
 // and behaviour is exactly what it was before.
 function nowMs() { return Date.now() + (state.clockOffset || 0); }
 
+// One request answers two questions: what time is it really, and is this tab
+// still running the code that is deployed. A tab left open overnight refetches
+// DATA on every wake but never reloads its own CODE, so a fix can be live for
+// hours while the people who need it are still running the version that has the
+// bug — which is exactly how a fix shipped one evening helped nobody the next.
 async function syncClock() {
   try {
-    const res = await fetch(location.pathname + '?t=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+    const res = await fetch(location.pathname + '?t=' + Date.now(), { cache: 'no-store' });
     const d = res.headers.get('date');
-    if (!d) return;
-    const server = new Date(d).getTime();
-    if (isNaN(server)) return;
-    state.clockOffset = server - Date.now();
-    if (Math.abs(state.clockOffset) > 120000) {
-      console.warn('device clock is off by', Math.round(state.clockOffset / 1000), 's');
-      renderClockWarning();
+    if (d) {
+      const server = new Date(d).getTime();
+      if (!isNaN(server)) {
+        state.clockOffset = server - Date.now();
+        if (Math.abs(state.clockOffset) > 120000) {
+          console.warn('device clock is off by', Math.round(state.clockOffset / 1000), 's');
+          renderClockWarning();
+        }
+      }
+    }
+    const html = await res.text();
+    const m = /js\/app\.js\?v=([^"']+)/.exec(html);
+    if (m && m[1] && m[1] !== clientBuild()) {
+      state.staleBuild = m[1];
+      renderStaleBuildWarning();
     }
     if (typeof renderCurrentView === 'function') renderCurrentView();
   } catch (e) { /* offline or blocked: keep the device clock */ }
+}
+
+// Nothing here reloads the page on its own — a reload mid-bet would lose the
+// slip being built. It offers the button and lets the person choose.
+function renderStaleBuildWarning() {
+  const el = document.getElementById('stale-build');
+  if (!el) return;
+  el.innerHTML = `เวอร์ชันใหม่พร้อมแล้ว (${state.staleBuild}) — แท็บนี้ยังใช้ตัวเก่าอยู่ `
+    + `<button id="stale-reload" style="font-size:0.8rem;font-weight:700;padding:2px 10px;margin-left:6px;border-radius:99px;border:1px solid var(--border);background:var(--accent);color:#000;cursor:pointer">โหลดใหม่</button>`;
+  el.classList.remove('hidden');
+  const btn = document.getElementById('stale-reload');
+  if (btn) btn.addEventListener('click', () => location.reload(true));
 }
 
 // The person cannot fix what they cannot see, so say it plainly and say which
