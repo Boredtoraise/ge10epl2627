@@ -98,7 +98,79 @@ function renderSummaryTab() {
     html += renderAdminSummary();
   }
 
+  html += renderTotalsTable();
   html += renderFunLeaderboard();
+
+  return html;
+}
+
+// --- รวมทั้งหมด ---
+// The leaderboard's big number already is settled + this month, but as one
+// figure with no breakdown, and ยอดค้าง deliberately keeps the two apart. This
+// table is the one place all four numbers sit side by side.
+//
+// Filter is `status !== 'cancelled'` — the same rule renderFunLeaderboard uses,
+// not balanceRows()'s approved-only one, so the รวม column always matches the
+// big number in the row right below it.
+function renderTotalsTable() {
+  const lang = currentLang;
+  const slips = getPeriodSlips();
+
+  const rows = getPlayers().map(player => {
+    const carry = getSeasonCarry(player);
+    const mine = slips.filter(s => s.player === player && s.status !== 'cancelled');
+    let running = 0, openWin = 0, openLose = 0;
+    mine.forEach(s => {
+      const r = resolveSlip(s);
+      running += r.profit;                       // pending resolves to 0
+      if (r.status !== 'pending') return;
+      openWin  += Math.max(0, (s.payout || 0) - (s.bet || 0));
+      openLose += s.bet || 0;
+    });
+    return {
+      player, running, openWin, openLose,
+      settled: carry.money,
+      total: carry.money + running,
+      keep: carry.hasHistory || mine.length > 0,
+    };
+  }).filter(r => r.keep);
+
+  if (!rows.length) return '';
+  rows.sort((a, b) => b.total - a.total);
+
+  const money = n => `<span style="color:${n >= 0 ? 'var(--accent)' : 'var(--secondary)'}">${n >= 0 ? '+' : '-'}${fmtM(Math.abs(n))}</span>`;
+  const th = s => `<th style="padding:6px 4px;text-align:right;font-weight:600;color:var(--text-muted);font-size:0.72rem;white-space:nowrap">${s}</th>`;
+  const td = s => `<td style="padding:7px 4px;text-align:right;white-space:nowrap">${s}</td>`;
+
+  let html = `<div class="lb-section open">`;
+  html += `<div class="lb-section-header"><h3>${lang === 'th' ? '📊 รวมทั้งหมด' : '📊 Season totals'}</h3></div>`;
+  html += `<div class="lb-section-body"><div style="overflow-x:auto">`;
+  html += `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">`;
+  html += `<tr><th style="padding:6px 4px;text-align:left;font-weight:600;color:var(--text-muted);font-size:0.72rem">${lang === 'th' ? 'ชื่อ' : 'Player'}</th>`;
+  html += th(lang === 'th' ? 'ปิดยอดแล้ว' : 'Settled');
+  html += th(lang === 'th' ? 'เดือนนี้' : 'This month');
+  html += th(lang === 'th' ? 'รอผล' : 'Open');
+  html += th(lang === 'th' ? 'รวม' : 'Total') + `</tr>`;
+
+  rows.forEach(r => {
+    const isMe = r.player === state.currentPlayer;
+    html += `<tr style="border-top:1px solid var(--border)${isMe ? ';background:var(--bg-input)' : ''}">`;
+    html += `<td style="padding:7px 4px;font-weight:700">${getDisplayName(r.player)}${isMe ? ' <span style="color:var(--secondary);font-size:0.72rem">★</span>' : ''}</td>`;
+    html += td(money(r.settled));
+    html += td(money(r.running));
+    html += td(r.openWin || r.openLose
+      ? `<span style="font-size:0.72rem"><span style="color:var(--accent)">+${fmtM(r.openWin)}</span> / <span style="color:var(--secondary)">-${fmtM(r.openLose)}</span></span>`
+      : `<span style="color:var(--text-muted)">—</span>`);
+    html += td(`<span style="font-weight:800">${money(r.total)}</span>`);
+    html += `</tr>`;
+  });
+
+  html += `</table></div>`;
+  html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px;line-height:1.6">`;
+  html += lang === 'th'
+    ? 'ปิดยอดแล้ว = เดือนที่ปิดไปแล้ว (standings) · เดือนนี้ = สลิปที่ยังไม่ปิดยอด · รอผล = ยังไม่รู้ผล ยังไม่นับใน "รวม"'
+    : 'Settled = closed months (standings) · This month = live slips · Open = undecided, not counted in Total';
+  html += `</div></div></div>`;
 
   return html;
 }
