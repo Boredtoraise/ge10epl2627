@@ -685,9 +685,14 @@ async function switchGw(gw) {
 
 // Fingerprint of the odds currently in state, to tell whether a refetch moved anything
 function oddsSignature() {
+  // bet_state belongs here too: opening or closing a session changes nothing
+  // about the prices, so without it refreshMatches() reported "nothing moved"
+  // and onTabWake returned before re-rendering — a tab left open kept showing
+  // เต็ง as shut after the admin had opened it.
   return Object.keys(state.ahLines).sort().map(id =>
     [id, state.ahLines[id], state.ahOddsH[id], state.ahOddsA[id],
-     state.ouLines[id], state.ouOddsO[id], state.ouOddsU[id]].join(':')
+     state.ouLines[id], state.ouOddsO[id], state.ouOddsU[id],
+     (state.matches[id] || {}).bet_state || ''].join(':')
   ).join('|');
 }
 

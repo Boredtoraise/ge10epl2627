@@ -625,13 +625,30 @@ async function renderBetting() {
     // The admin can override the opening per session from the ราคา tab; the
     // server checks the same thing, this is only so the message is instant.
     if (!isStepSlip) {
-      const sm = (state.matchById && state.matchById[pickEntries[0][1].matchId]);
-      const betState = sm ? betStateOfMatch(sm) : 'auto';
+      const matchId = pickEntries[0][1].matchId;
+      const readState = () => {
+        const sm = (state.matchById && state.matchById[matchId]);
+        const bs = sm ? betStateOfMatch(sm) : 'auto';
+        return { bs: bs, opensAt: sm && bs === 'auto' ? singleOpensAt(sm) : 0 };
+      };
+      let w = readState();
+      // About to refuse on local data — but the admin opens a session from the
+      // ราคา tab, and a tab that has not refetched since still holds `auto`.
+      // Refusing without asking told the player "not open yet" while the server
+      // would have taken the bet, and only a reload cleared it. Refetch once,
+      // then decide; the cost lands only on a bet that was going to be refused.
+      if (w.bs === 'closed' || (w.opensAt && nowMs() < w.opensAt)) {
+        showLoading();
+        await refreshMatches();
+        hideLoading();
+        w = readState();
+      }
+      const betState = w.bs;
       if (betState === 'closed') {
         showToast((lang === 'th' ? 'ตอนนี้ปิดรับเต็ง — สเต็ปยังแทงได้' : 'Singles are closed right now — steps are still open') + ' [c2]', 5000);
         return;
       }
-      const opensAt = sm && betState === 'auto' ? singleOpensAt(sm) : 0;
+      const opensAt = w.opensAt;
       if (opensAt && nowMs() < opensAt) {
         const t = new Date(opensAt + 7 * 3600 * 1000);
         const d = `${t.getUTCDate()}/${t.getUTCMonth() + 1}`;
