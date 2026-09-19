@@ -195,6 +195,29 @@ async function setBetState(gw, betState, matchIds) {
 // Monthly settlement. `standings` rows are computed on the client with the same
 // resolveSlip() the UI uses; archive=true also MOVES that month's slips to the
 // slips_archive tab (appended there first, verified, then removed from `slips`).
+// Records that one player's settled month was actually paid. `target` is the
+// player being cleared; `player` stays the admin doing it, the same as every
+// other write here.
+async function markPaid(period, target, paid) {
+  try {
+    const res = await fetch(API_BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'mark_paid',
+        player: state.currentPlayer,
+        pin: localStorage.getItem('epl2627_pin'),
+        period: period,
+        target: target,
+        paid: !!paid,
+      }),
+    });
+    return await res.json();
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 async function settlePeriod(period, standings, archive) {
   try {
     const res = await fetch(API_BASE_URL, {
